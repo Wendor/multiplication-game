@@ -2,7 +2,7 @@
   <div class="menu-container">
     <div class="content">
       <div class="header">
-        <div class="mascot">🎓</div>
+        <img src="/pwa-192x192.png" alt="Логотип" class="app-logo" />
         <h1>Математика</h1>
         <p>Выбери режим игры</p>
       </div>
@@ -20,7 +20,7 @@
           <div class="card-icon">+/-</div>
           <div class="card-info">
             <h2>Сложение</h2>
-            <span>Счет до 20 и выше</span>
+            <span>Счет до 50</span>
           </div>
         </button>
       </div>
@@ -29,21 +29,10 @@
 </template>
 
 <script setup lang="ts">
-// Определяем события, чтобы TypeScript не ругался
+// defineEmits доступен автоматически, импорт не нужен
 const emit = defineEmits(['select-mode']);
 
-// Костыль для App.vue: там мы слушаем @go-home, но MainMenu особенный.
-// Чтобы не усложнять App.vue, мы будем менять родительский ref напрямую
-// ИЛИ (лучше) сделаем так:
-// В App.vue изменим: <MainMenu @select-mode="(mode) => currentScene = mode" />
-// Но так как там <component :is>, нужно передавать пропсы/эмиты динамически.
-// ПРОСТОЙ ВАРИАНТ: Используем $parent или inject. Но это не clean code.
-// CLEAN CODE ВАРИАНТ: В App.vue добавим обработчик.
-
 const select = (mode: string) => {
-  // Мы просто эмитим событие родителю
-  // В App.vue нужно будет добавить слушатель @select-mode
-  // См. обновление App.vue ниже.
   emit('select-mode', mode);
 };
 </script>
@@ -64,15 +53,23 @@ const select = (mode: string) => {
   text-align: center;
 }
 
-.mascot { font-size: 80px; margin-bottom: 10px; animation: bounce 2s infinite; }
+/* Стили для логотипа */
+.app-logo {
+  width: 140px;
+  height: 140px;
+  margin-bottom: 15px;
+  border-radius: 28px; /* Скругление углов как у иконки iOS */
+  box-shadow: 0 10px 25px rgba(0,0,0,0.1); /* Красивая тень */
+  animation: bounce 2s infinite ease-in-out;
+}
 
-h1 { margin: 0; color: #2c3e50; font-size: 2.5rem; }
-p { color: #7f8c8d; margin-bottom: 40px; }
+h1 { margin: 0; color: #2c3e50; font-size: 2.2rem; margin-bottom: 5px; }
+p { color: #7f8c8d; margin-bottom: 30px; font-size: 1.1rem; }
 
 .buttons-stack {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 15px;
 }
 
 .mode-card {
@@ -81,32 +78,34 @@ p { color: #7f8c8d; margin-bottom: 40px; }
   background: white;
   border: none;
   padding: 20px;
-  border-radius: 24px;
+  border-radius: 20px;
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
   box-shadow: 0 4px 15px rgba(0,0,0,0.05);
   text-align: left;
+  width: 100%;
 }
 
 .mode-card:active { transform: scale(0.96); }
 
 .card-icon {
-  width: 60px; height: 60px;
-  border-radius: 50%;
+  width: 56px; height: 56px;
+  border-radius: 16px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 32px; font-weight: bold; color: white;
-  margin-right: 20px;
+  font-size: 28px; font-weight: bold; color: white;
+  margin-right: 15px;
   flex-shrink: 0;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
 }
 
-.multiply .card-icon { background: #3498db; }
-.plusminus .card-icon { background: #9b59b6; }
+.multiply .card-icon { background: linear-gradient(135deg, #3498db, #2980b9); }
+.plusminus .card-icon { background: linear-gradient(135deg, #9b59b6, #8e44ad); }
 
-.card-info h2 { margin: 0; font-size: 1.5rem; color: #2c3e50; }
+.card-info h2 { margin: 0; font-size: 1.3rem; color: #2c3e50; font-weight: 700; }
 .card-info span { color: #95a5a6; font-size: 0.9rem; }
 
 @keyframes bounce {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+  50% { transform: translateY(-8px); }
 }
 </style>
