@@ -1,55 +1,112 @@
 import { useProgressStore } from '../stores/progress';
 
+// 1. Описываем, что у window может быть webkitAudioContext
+// Это уберет ошибку "Unexpected any"
+interface WindowWithWebkit extends Window {
+  webkitAudioContext?: typeof AudioContext;
+}
+
+// Переменные вне функции (Singleton)
+let audioCtx: AudioContext | null = null;
+let lastPlayedTime = 0;
+
 export function useAudio() {
   const progress = useProgressStore();
 
-  const playTone = (freq: number, type: 'sine' | 'square' | 'triangle', duration: number) => {
-    if (progress.isMuted) return;
-
-    // Check for window existence to be safe (SSR friendly)
+  const initAudio = () => {
     if (typeof window === 'undefined') return;
 
-    // Use explicit any to bypass the strict type check on webkitAudioContext for older browsers
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContext) return;
+    if (!audioCtx) {
+      // 2. Используем наш тип WindowWithWebkit вместо any
+      const AudioContext = window.AudioContext || (window as WindowWithWebkit).webkitAudioContext;
+      if (AudioContext) {
+        audioCtx = new AudioContext();
+      }
+    }
 
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => { });
+    }
+  };
 
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+  const playTone = (freq: number, type: 'sine' | 'square' | 'triangle', duration: number, volume = 0.1) => {
+    if (progress.isMuted) return;
 
-    gain.gain.setValueAtTime(0.1, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + duration);
+    const now = Date.now();
+    if (now - lastPlayedTime < 50) return;
+    lastPlayedTime = now;
 
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+    initAudio();
+    if (!audioCtx) return;
 
-    osc.start();
-    osc.stop(ctx.currentTime + duration);
+    try {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+
+      gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    } catch (e) {
+      console.error('Audio play error:', e);
+    }
   };
 
   const playCorrect = () => {
     playTone(600, 'sine', 0.1);
-    setTimeout(() => playTone(800, 'sine', 0.2), 100);
+    if (audioCtx) {
+      setTimeout(() => {
+        if (!audioCtx || progress.isMuted) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.2);
+      }, 100);
+    }
   };
 
   const playWrong = () => {
-    playTone(200, 'square', 0.15);
-    setTimeout(() => playTone(150, 'square', 0.3), 100);
-    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(200);
+    playTone(150, 'square', 0.2, 0.15);
   };
 
   const playWin = () => {
-    [523, 659, 784, 1046].forEach((freq, i) => {
-      setTimeout(() => playTone(freq, 'triangle', 0.3), i * 150);
+    if (progress.isMuted) return;
+    initAudio();
+    if (!audioCtx) return;
+
+    const notes = [523, 659, 784, 1046];
+    notes.forEach((freq, i) => {
+      setTimeout(() => {
+        if (!audioCtx || progress.isMuted) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+      }, i * 150);
     });
   };
 
   const playClick = () => {
-    playTone(800, 'triangle', 0.05);
+    playTone(800, 'triangle', 0.05, 0.05);
   };
 
   return { playCorrect, playWrong, playWin, playClick };
