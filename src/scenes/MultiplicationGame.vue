@@ -19,7 +19,6 @@
 
     <transition name="fade-mode" mode="out-in">
       <div v-if="mode === 'learning'" key="learning" class="learning-wrapper">
-
         <LearningNav
           v-model="activeTable"
           :total="maxNumber"
@@ -71,6 +70,7 @@
         <div v-if="mode === 'mistakes' && !testFinished" class="mistakes-title">Отработка ошибок 🩹</div>
 
         <GameTestArea
+          :class="{ 'shake': isError }"
           :question="currentQuestionForProps"
           :currentIndex="currentQuestionIndex"
           :total="mode === 'mistakes' ? questions.length : 10"
@@ -105,8 +105,13 @@ import LearningNav from '../components/LearningNav.vue';
 import GameTestArea from '../components/GameTestArea.vue';
 import MathVisualizer from '../components/MathVisualizer.vue';
 import { useProgressStore } from '../stores/progress';
+import { useAudio } from '../composables/useAudio';
+import { useHaptics } from '../composables/useHaptics';
+import confetti from 'canvas-confetti';
 
 const progress = useProgressStore();
+const { playCorrect, playWrong, playWin } = useAudio();
+const { vibrateMedium, vibrateError, vibrateWin } = useHaptics();
 
 type Mode = 'learning' | 'test' | 'blitz' | 'mistakes';
 type TestTarget = 'mix' | number;
@@ -124,6 +129,7 @@ const testFinished = ref(false);
 const questions = reactive<Question[]>([]);
 const selectedFact = ref<Fact | null>(null);
 const questionStartTime = ref(0);
+const isError = ref(false);
 
 const highScore = computed(() => progress.multiplicationHighScore);
 const blitzHighScore = computed(() => progress.blitzHighScore);
@@ -179,18 +185,40 @@ const pickWeighted = (items: WeightedFact[]): WeightedFact => {
 };
 const getRandomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 const generateOptions = (correct: number) => { const s = new Set<number>(); s.add(correct); while (s.size < 4) { const dev = getRandomInt(-5, 5); const w = correct + dev; if (w > 0 && w !== correct) s.add(w); } return Array.from(s).sort(() => Math.random() - 0.5); };
+
 const onAnswer = (isCorrect: boolean) => {
   if (!currentQuestion.value) return;
   const timeTaken = Date.now() - questionStartTime.value;
-  if (isCorrect) { score.value++; progress.incrementTotalSolved(); }
+
+  if (isCorrect) {
+    score.value++;
+    progress.incrementTotalSolved();
+    playCorrect();
+    vibrateMedium();
+  } else {
+    playWrong();
+    vibrateError();
+    isError.value = true;
+    setTimeout(() => isError.value = false, 400);
+  }
   progress.saveStat(currentQuestion.value.a, currentQuestion.value.b, isCorrect, timeTaken);
 };
+
 const onNext = () => { if (currentQuestionIndex.value < questions.length - 1) { currentQuestionIndex.value++; questionStartTime.value = Date.now(); } else { finishGame(); } };
+
 const finishGame = () => {
   testFinished.value = true;
+  const isPerfect = (mode.value === 'test' && score.value === 10) || (mode.value === 'blitz' && score.value > 15);
+
+  if (isPerfect) {
+    playWin();
+    vibrateWin();
+    confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#3498db', '#e74c3c', '#f1c40f', '#2ecc71'] });
+  }
   if (mode.value === 'blitz') { progress.checkNewRecord('blitz', score.value); }
   else if (mode.value === 'test') { progress.checkNewRecord('multiplication', score.value); if (score.value === 10) progress.registerPerfectTest(); }
 };
+
 const resetTest = () => { currentQuestionIndex.value = 0; score.value = 0; testFinished.value = false; generateTest(); };
 const setTestTarget = (target: TestTarget) => { testTarget.value = target; resetTest(); };
 const selectFact = (a: number, b: number) => { if (selectedFact.value?.a === a && selectedFact.value?.b === b) selectedFact.value = null; else selectedFact.value = { a, b }; };

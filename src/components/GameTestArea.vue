@@ -66,6 +66,8 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted } from 'vue';
 import { useGameEffects } from '../composables/useGameEffects';
+import { useHaptics } from '../composables/useHaptics';
+const { vibrateLight } = useHaptics();
 
 const props = defineProps<{
   question: { text: string; correctAnswer: number; options: number[] } | undefined;
@@ -160,6 +162,7 @@ watch(() => props.question, () => {
 
 const handleAnswerClick = async (option: number) => {
   if (isAnswered.value || !props.question) return;
+  vibrateLight();
 
   isAnswered.value = true;
   selectedOption.value = option;

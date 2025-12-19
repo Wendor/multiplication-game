@@ -10,21 +10,12 @@
       :mistakesCount="mistakesCount"
       :showDifficulty="(mode === 'test' || mode === 'learning') && testTarget === 'mix'"
       v-model:currentDifficulty="maxNumber"
-      :difficultyOptions="[
-        { label: 'до 20', value: 20 },
-        { label: 'до 50', value: 50 },
-        { label: 'до 100', value: 100 }
-      ]"
+      :difficultyOptions="[{ label: 'до 20', value: 20 }, { label: 'до 50', value: 50 }, { label: 'до 100', value: 100 }]"
     />
 
     <transition name="fade-mode" mode="out-in">
       <div v-if="mode === 'learning'" key="learning" class="learning-wrapper">
-        <LearningNav
-          v-model="activeTable"
-          :total="10"
-          :getMedal="progress.getDivisionMedal"
-        />
-
+        <LearningNav v-model="activeTable" :total="10" :getMedal="progress.getDivisionMedal" />
         <transition name="slide-up-fade" mode="out-in">
           <div :key="activeTable" class="single-table-view">
             <h2 class="table-title">Делим на {{ activeTable }}</h2>
@@ -38,7 +29,6 @@
             </div>
           </div>
         </transition>
-
         <div class="visualizer-backdrop" v-if="selectedFact" @click="selectedFact = null"></div>
         <transition name="slide-up-panel">
           <div class="visualizer-panel" v-if="selectedFact">
@@ -46,9 +36,7 @@
               <button class="close-btn-mobile" @click="selectedFact = null">✕</button>
               <h3>Разберем пример:</h3>
               <div class="big-equation"><span class="color-a">{{ selectedFact.dividend }}</span> : <span class="color-b">{{ selectedFact.divisor }}</span> = {{ selectedFact.dividend / selectedFact.divisor }}</div>
-              <div class="viz-container">
-                <MathVisualizer type="division" :a="selectedFact.dividend" :b="selectedFact.divisor" />
-              </div>
+              <div class="viz-container"><MathVisualizer type="division" :a="selectedFact.dividend" :b="selectedFact.divisor" /></div>
             </div>
           </div>
         </transition>
@@ -70,6 +58,7 @@
         <div v-if="mode === 'mistakes' && !testFinished" class="mistakes-title">Отработка ошибок 🩹</div>
 
         <GameTestArea
+          :class="{ 'shake': isError }"
           :question="currentQuestionForProps"
           :currentIndex="currentQuestionIndex"
           :total="mode === 'mistakes' ? questions.length : (mode === 'blitz' ? 100 : 10)"
@@ -103,8 +92,13 @@ import LearningNav from '../components/LearningNav.vue';
 import GameTestArea from '../components/GameTestArea.vue';
 import MathVisualizer from '../components/MathVisualizer.vue';
 import { useProgressStore } from '../stores/progress';
+import { useAudio } from '../composables/useAudio';
+import { useHaptics } from '../composables/useHaptics';
+import confetti from 'canvas-confetti';
 
 const progress = useProgressStore();
+const { playCorrect, playWrong, playWin } = useAudio();
+const { vibrateMedium, vibrateError, vibrateWin } = useHaptics();
 
 type Mode = 'learning' | 'test' | 'blitz' | 'mistakes';
 type TestTarget = 'mix' | number;
@@ -117,6 +111,7 @@ const selectedFact = ref<{dividend: number, divisor: number} | null>(null);
 const currentQuestionIndex = ref(0);
 const score = ref(0);
 const testFinished = ref(false);
+const isError = ref(false);
 
 interface DivQuestion { text: string; dividend: number; divisor: number; correctAnswer: number; options: number[]; }
 interface WeightedDivFact { dividend: number; divisor: number; weight: number; }
@@ -190,18 +185,38 @@ const createQuestionObject = (dividend: number, divisor: number): DivQuestion =>
 };
 const getRandomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 const generateOptions = (correct: number) => { const s = new Set<number>(); s.add(correct); while (s.size < 4) { const dev = getRandomInt(-3, 3); const w = correct + dev; if(w > 0 && w !== correct) s.add(w); } return Array.from(s).sort(() => Math.random() - 0.5); };
+
 const onAnswer = (isCorrect: boolean) => {
   if (!currentQuestion.value) return;
   const timeTaken = Date.now() - questionStartTime.value;
-  if (isCorrect) { score.value++; progress.incrementTotalSolved(); }
+  if (isCorrect) {
+    score.value++;
+    progress.incrementTotalSolved();
+    playCorrect();
+    vibrateMedium();
+  } else {
+    playWrong();
+    vibrateError();
+    isError.value = true;
+    setTimeout(() => isError.value = false, 400);
+  }
   progress.saveDivisionStat(currentQuestion.value.dividend, currentQuestion.value.divisor, isCorrect, timeTaken);
 };
+
 const onNext = () => { if (currentQuestionIndex.value < questions.length - 1) { currentQuestionIndex.value++; questionStartTime.value = Date.now(); } else { finishGame(); } };
+
 const finishGame = () => {
   testFinished.value = true;
+  const isPerfect = (mode.value === 'test' && score.value === 10) || (mode.value === 'blitz' && score.value > 15);
+  if (isPerfect) {
+    playWin();
+    vibrateWin();
+    confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#3498db', '#e74c3c', '#f1c40f', '#2ecc71'] });
+  }
   if (mode.value === 'blitz') progress.checkNewRecord('blitz', score.value);
   else { if (score.value > highScore.value) progress.checkNewRecord('division', score.value); if (score.value === 10) progress.registerPerfectTest(); }
 };
+
 const resetTest = () => { currentQuestionIndex.value = 0; score.value = 0; testFinished.value = false; generateTest(); };
 onMounted(() => generateTest());
 </script>
