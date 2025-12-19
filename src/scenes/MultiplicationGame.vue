@@ -169,8 +169,6 @@ const testFinished = ref(false);
 const questions = reactive<Question[]>([]);
 const hideAnswers = ref(false);
 const selectedFact = ref<Fact | null>(null);
-
-// Таймер для ачивки "Скорость"
 const questionStartTime = ref(0);
 
 const highScore = computed(() => progress.multiplicationHighScore);
@@ -197,41 +195,53 @@ watch(maxNumber, (newMax) => {
 const generateTest = () => {
   questions.length = 0;
 
-  // 1. РЕЖИМ ОШИБОК
   if (mode.value === 'mistakes') {
     const errors: {a: number, b: number}[] = progress.getMistakes();
     errors.sort(() => Math.random() - 0.5);
     const selected = errors.slice(0, 10);
-
     selected.forEach(p => {
        const ans = p.a * p.b;
        questions.push({ a: p.a, b: p.b, correctAnswer: ans, options: generateOptions(ans) });
     });
-    // Запускаем таймер первого вопроса
     questionStartTime.value = Date.now();
     return;
   }
 
   const limit = mode.value === 'blitz' ? 100 : 10;
-  const candidates: WeightedFact[] = [];
 
-  if (testTarget.value === 'mix' || mode.value === 'blitz') {
-    for (let i = 2; i <= maxNumber.value; i++) {
-      for (let j = i; j <= maxNumber.value; j++) candidates.push(createWeightedFact(i, j));
+  // Создаем ПУЛ кандидатов
+  let candidates: WeightedFact[] = [];
+  const fillCandidates = () => {
+    const newPool: WeightedFact[] = [];
+    if (testTarget.value === 'mix' || mode.value === 'blitz') {
+      for (let i = 2; i <= maxNumber.value; i++) {
+        for (let j = i; j <= maxNumber.value; j++) newPool.push(createWeightedFact(i, j));
+      }
+    } else {
+      const target = testTarget.value as number;
+      for (let i = 1; i <= 10; i++) newPool.push(createWeightedFact(target, i));
     }
-  } else {
-    const target = testTarget.value as number;
-    for (let i = 1; i <= 10; i++) candidates.push(createWeightedFact(target, i));
-  }
+    return newPool;
+  };
+
+  candidates = fillCandidates();
 
   for (let k = 0; k < limit; k++) {
-    if (candidates.length === 0) break;
+    // Если кандидаты кончились (актуально для блица на одной таблице), заливаем заново
+    if (candidates.length === 0) {
+      if (mode.value === 'blitz') {
+        candidates = fillCandidates();
+      } else {
+        // Для обычного теста просто выходим, но это не должно случиться (там 10 вопросов)
+        break;
+      }
+    }
+
     const selected = pickWeighted(candidates);
 
-    if (mode.value !== 'blitz') {
-      const index = candidates.indexOf(selected);
-      if (index > -1) candidates.splice(index, 1);
-    }
+    // УДАЛЯЕМ выбранного кандидата из пула, ЧТОБЫ ИЗБЕЖАТЬ ПОВТОРОВ
+    const index = candidates.indexOf(selected);
+    if (index > -1) candidates.splice(index, 1);
 
     const swap = Math.random() > 0.5;
     const finalA = swap ? selected.b : selected.a;
@@ -241,7 +251,6 @@ const generateTest = () => {
     questions.push({ a: finalA, b: finalB, correctAnswer: ans, options: generateOptions(ans) });
   }
 
-  // Запускаем таймер первого вопроса
   questionStartTime.value = Date.now();
 };
 
@@ -273,23 +282,17 @@ const generateOptions = (correct: number) => { const s = new Set<number>(); s.ad
 
 const onAnswer = (isCorrect: boolean) => {
   if (!currentQuestion.value) return;
-
-  // Считаем время
   const timeTaken = Date.now() - questionStartTime.value;
-
   if (isCorrect) {
     score.value++;
     progress.incrementTotalSolved();
   }
-
-  // Сохраняем стату + передаем время для ачивки "Гонщик"
   progress.saveStat(currentQuestion.value.a, currentQuestion.value.b, isCorrect, timeTaken);
 };
 
 const onNext = () => {
   if (currentQuestionIndex.value < questions.length - 1) {
     currentQuestionIndex.value++;
-    // Сброс таймера для следующего
     questionStartTime.value = Date.now();
   } else {
     finishGame();
@@ -302,7 +305,6 @@ const finishGame = () => {
      progress.checkNewRecord('blitz', score.value);
   } else if (mode.value === 'test') {
      progress.checkNewRecord('multiplication', score.value);
-     // Ачивка "Перфекционист"
      if (score.value === 10) {
        progress.registerPerfectTest();
      }
@@ -338,12 +340,12 @@ onMounted(() => {
   position: sticky; top: 0; z-index: 100;
   background-color: rgba(244, 246, 248, 0.95); backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(0,0,0,0.05);
-  margin: -10px -10px 15px -10px; padding: 10px 15px; width: calc(100% + 20px);
+  margin: -10px -10px 15px -10px; padding: 10px 15px; width: auto;
   display: flex; align-items: center; gap: 10px;
 }
-.back-btn { background: white; border: none; width: 40px; height: 40px; border-radius: 50%; font-size: 20px; color: #2c3e50; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+.back-btn { background: white; border: none; width: 40px; height: 40px; border-radius: 50%; font-size: 20px; color: #2c3e50; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); flex-shrink: 0; }
 h1 { font-size: 1.2rem; margin: 0; color: #2c3e50; flex-grow: 1; }
-.header-stats { background: #ffecb3; color: #d35400; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 0.9rem; white-space: nowrap; }
+.header-stats { background: #ffecb3; color: #d35400; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 0.9rem; white-space: nowrap; flex-shrink: 0; }
 
 .controls-area { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
 .segmented-control { display: flex; width: 100%; background: #e0e0e0; padding: 4px; border-radius: 12px; }

@@ -172,7 +172,7 @@ const handleAnswerClick = async (option: number) => {
   emit('answer', isCorrect);
 
   // В Блице задержка меньше (0.5с), чтобы быстрее решать
-  const delay = props.isBlitz ? 500 : 1000;
+  const delay = (props.isBlitz ? 500 : 1000) / (isCorrect ? 3 : 1);
   await new Promise(resolve => setTimeout(resolve, delay));
 
   emit('next');

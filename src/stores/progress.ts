@@ -42,18 +42,20 @@ export const useProgressStore = defineStore('progress', () => {
 
   const unlockedAchievements = ref<string[]>([]);
   const isMuted = ref(false);
+
+  // Статистика
   const multiplicationStats = ref<StatData>({});
+  const divisionStats = ref<StatData>({}); // <--- НОВОЕ: Статистика деления
 
   const perfectTestCount = ref(0);
   const dailyStreak = ref(0);
   const lastVisitDate = ref('');
   const mistakesCorrected = ref(0);
 
-  // Тосты
   const toastVisible = ref(false);
   const currentToastAchievement = ref<Achievement | null>(null);
 
-  // --- СПИСОК АЧИВОК ---
+  // --- АЧИВКИ (Оставляем тот же список) ---
   const allAchievements: Achievement[] = [
     { id: 'first_steps', emoji: '👟', title: 'Первые шаги', description: 'Реши 10 примеров', condition: (s) => s.totalSolved >= 10 },
     { id: 'warmup', emoji: '🕯️', title: 'Разминка', description: '5 правильных ответов подряд', condition: (s) => s.currentStreak >= 5 },
@@ -80,7 +82,6 @@ export const useProgressStore = defineStore('progress', () => {
     { id: 'math_champion', emoji: '🏆', title: 'Чемпион', description: 'Собери все 10 золотых медалей', condition: (s) => s.goldMedalsCount >= 10 }
   ];
 
-  // --- ЭТАПЫ ЭВОЛЮЦИИ (РАНГИ + ПИТОМЦЫ) ---
   const stages = [
     { lvl: 0, emoji: '🥚', title: 'Яйцо' },
     { lvl: 2, emoji: '🐣', title: 'Цыплёнок' },
@@ -95,7 +96,6 @@ export const useProgressStore = defineStore('progress', () => {
     { lvl: 100, emoji: '🚀', title: 'Космический Разум' }
   ];
 
-  // --- ACTIONS (Определяем ДО init) ---
   const checkDailyProgress = () => {
     const today = new Date().toISOString().split('T')[0]!;
     if (lastVisitDate.value !== today) {
@@ -127,6 +127,10 @@ export const useProgressStore = defineStore('progress', () => {
     const stats = localStorage.getItem('multiplicationStats');
     if (stats) multiplicationStats.value = JSON.parse(stats);
 
+    // НОВОЕ: Загрузка статистики деления
+    const divStats = localStorage.getItem('divisionStats');
+    if (divStats) divisionStats.value = JSON.parse(divStats);
+
     const unlocked = localStorage.getItem('unlockedAchievements');
     if (unlocked) unlockedAchievements.value = JSON.parse(unlocked);
 
@@ -154,22 +158,20 @@ export const useProgressStore = defineStore('progress', () => {
   watch(divisionHighScore, (val) => localStorage.setItem('divisionHighScore', val.toString()));
   watch(blitzHighScore, (val) => localStorage.setItem('blitzHighScore', val.toString()));
   watch(totalSolved, (val) => localStorage.setItem('totalSolved', val.toString()));
-
   watch(perfectTestCount, (val) => localStorage.setItem('perfectTestCount', val.toString()));
   watch(dailyStreak, (val) => localStorage.setItem('dailyStreak', val.toString()));
   watch(lastVisitDate, (val) => localStorage.setItem('lastVisitDate', val));
   watch(mistakesCorrected, (val) => localStorage.setItem('mistakesCorrected', val.toString()));
 
   watch(multiplicationStats, (val) => localStorage.setItem('multiplicationStats', JSON.stringify(val)), { deep: true });
+  // НОВОЕ: Сохранение статистики деления
+  watch(divisionStats, (val) => localStorage.setItem('divisionStats', JSON.stringify(val)), { deep: true });
   watch(unlockedAchievements, (val) => localStorage.setItem('unlockedAchievements', JSON.stringify(val)), { deep: true });
   watch(isMuted, (val) => localStorage.setItem('isMuted', JSON.stringify(val)));
 
 
   // --- GETTERS ---
-  const currentLevel = computed(() => {
-    return Math.floor(Math.sqrt(totalSolved.value / 5)) + 1;
-  });
-
+  const currentLevel = computed(() => Math.floor(Math.sqrt(totalSolved.value / 5)) + 1);
   const levelProgress = computed(() => {
     const currentLvl = currentLevel.value;
     const nextLvl = currentLvl + 1;
@@ -181,15 +183,13 @@ export const useProgressStore = defineStore('progress', () => {
     return Math.min(100, Math.max(0, (have / needed) * 100));
   });
 
-  // НОВЫЙ ЕДИНЫЙ ГЕТТЕР ПЕРСОНАЖА
   const currentCharacter = computed(() => {
     const lvl = currentLevel.value;
-    // Находим последнюю стадию, которая меньше или равна текущему уровню
     const stage = [...stages].reverse().find(s => lvl >= s.lvl);
     return stage || stages[0];
   });
 
-  // Вспомогательная функция
+  // Вспомогательная функция для медалей умножения
   const calcMedal = (num: number) => {
     let masteredFacts = 0; let attemptedFacts = 0;
     for (let i = 1; i <= 10; i++) {
@@ -203,7 +203,24 @@ export const useProgressStore = defineStore('progress', () => {
     return 0;
   };
 
-  // --- ACTIONS ---
+  // НОВОЕ: Расчет медалей для деления
+  const calcDivisionMedal = (divisor: number) => {
+    let masteredFacts = 0; let attemptedFacts = 0;
+    // В делении таблица "на 2" — это 2:2, 4:2 ... 20:2. Всего 10 примеров.
+    for (let i = 1; i <= 10; i++) {
+      const dividend = i * divisor;
+      const key = `${dividend}:${divisor}`;
+      const s = divisionStats.value[key];
+      if (s) {
+        if (s.c > 0 || s.w > 0) attemptedFacts++;
+        if (s.c >= 5 && s.w === 0) masteredFacts++;
+      }
+    }
+    if (masteredFacts === 10) return 3; // Золото
+    if (attemptedFacts === 10 && masteredFacts >= 5) return 2; // Серебро
+    if (attemptedFacts === 10) return 1; // Бронза
+    return 0;
+  };
 
   const triggerToast = (ach: Achievement) => {
     currentToastAchievement.value = ach;
@@ -242,16 +259,8 @@ export const useProgressStore = defineStore('progress', () => {
     });
   };
 
-  const registerPerfectTest = () => {
-    perfectTestCount.value++;
-    checkAchievements();
-  };
-
-  const incrementTotalSolved = () => {
-    totalSolved.value++;
-    checkDailyProgress();
-    checkAchievements();
-  };
+  const registerPerfectTest = () => { perfectTestCount.value++; checkAchievements(); };
+  const incrementTotalSolved = () => { totalSolved.value++; checkDailyProgress(); checkAchievements(); };
 
   const saveStat = (a: number, b: number, isCorrect: boolean, timeTaken: number = 0) => {
     if (isCorrect) currentStreak.value++;
@@ -265,9 +274,7 @@ export const useProgressStore = defineStore('progress', () => {
 
     if (isCorrect) {
       multiplicationStats.value[key].c++;
-      if (multiplicationStats.value[key].w > 0) {
-        mistakesCorrected.value++;
-      }
+      if (multiplicationStats.value[key].w > 0) mistakesCorrected.value++;
       multiplicationStats.value[key].w = 0;
     } else {
       multiplicationStats.value[key].w++;
@@ -275,18 +282,50 @@ export const useProgressStore = defineStore('progress', () => {
     checkAchievements(timeTaken);
   };
 
-  const checkNewRecord = (game: string, score: number) => {
-    if (game === 'multiplication' && score > multiplicationHighScore.value) multiplicationHighScore.value = score;
-    if (game === 'sumsub' && score > sumSubHighScore.value) sumSubHighScore.value = score;
-    if (game === 'division' && score > divisionHighScore.value) divisionHighScore.value = score;
-    if (game === 'blitz' && score > blitzHighScore.value) blitzHighScore.value = score;
-    checkAchievements();
+  // НОВОЕ: Сохранение статистики деления
+  const saveDivisionStat = (dividend: number, divisor: number, isCorrect: boolean, timeTaken: number = 0) => {
+    if (isCorrect) currentStreak.value++;
+    else currentStreak.value = 0;
+
+    const key = `${dividend}:${divisor}`;
+
+    if (!divisionStats.value[key]) divisionStats.value[key] = { c: 0, w: 0 };
+
+    if (isCorrect) {
+      divisionStats.value[key].c++;
+      if (divisionStats.value[key].w > 0) mistakesCorrected.value++;
+      divisionStats.value[key].w = 0;
+    } else {
+      divisionStats.value[key].w++;
+    }
+    checkAchievements(timeTaken);
   };
 
   const getStat = (a: number, b: number) => {
     const min = Math.min(a, b);
     const max = Math.max(a, b);
     return multiplicationStats.value[`${min}x${max}`] || { c: 0, w: 0 };
+  };
+
+  // НОВОЕ: Получить статистику конкретного примера деления
+  const getDivisionStat = (dividend: number, divisor: number) => {
+    return divisionStats.value[`${dividend}:${divisor}`] || { c: 0, w: 0 };
+  };
+
+  // НОВОЕ: Ошибки деления для режима "Работа над ошибками"
+  const getDivisionMistakes = () => {
+    const mistakes: { dividend: number, divisor: number }[] = [];
+    for (const [key, val] of Object.entries(divisionStats.value)) {
+      if (val.w > 0) {
+        const parts = key.split(':');
+        if (parts.length === 2) {
+          const d = parseInt(parts[0]!, 10);
+          const div = parseInt(parts[1]!, 10);
+          mistakes.push({ dividend: d, divisor: div });
+        }
+      }
+    }
+    return mistakes;
   };
 
   const getMistakes = (): { a: number, b: number }[] => {
@@ -305,6 +344,17 @@ export const useProgressStore = defineStore('progress', () => {
   };
 
   const getMedalForNumber = (num: number) => calcMedal(num);
+  // НОВОЕ
+  const getDivisionMedal = (num: number) => calcDivisionMedal(num);
+
+  const checkNewRecord = (game: string, score: number) => {
+    if (game === 'multiplication' && score > multiplicationHighScore.value) multiplicationHighScore.value = score;
+    if (game === 'sumsub' && score > sumSubHighScore.value) sumSubHighScore.value = score;
+    if (game === 'division' && score > divisionHighScore.value) divisionHighScore.value = score;
+    if (game === 'blitz' && score > blitzHighScore.value) blitzHighScore.value = score;
+    checkAchievements();
+  };
+
   const toggleMute = () => { isMuted.value = !isMuted.value; };
 
   init();
@@ -314,13 +364,13 @@ export const useProgressStore = defineStore('progress', () => {
     unlockedAchievements, isMuted, toastVisible, currentToastAchievement,
     perfectTestCount, dailyStreak, mistakesCorrected,
 
-    currentLevel,
-    levelProgress,
-    currentCharacter, // <--- ТЕПЕРЬ ОДИН ОБЩИЙ ГЕТТЕР
-    allAchievements,
+    currentLevel, levelProgress, currentCharacter, allAchievements,
 
     incrementTotalSolved, saveStat, getStat, checkNewRecord,
     getMistakes, getMedalForNumber, toggleMute,
-    registerPerfectTest, checkAchievements
+    registerPerfectTest, checkAchievements,
+
+    // Новые экспорты для деления
+    saveDivisionStat, getDivisionStat, getDivisionMedal, getDivisionMistakes
   };
 });

@@ -2,88 +2,156 @@
   <div class="stats-container">
     <div class="top-bar">
       <button class="back-btn" @click="nav.goBack()">←</button>
-      <div class="title-group">
-        <h1>Твой прогресс</h1>
-        <p class="subtitle">Таблица умножения</p>
+      <h1>Прогресс</h1>
+    </div>
+
+    <div class="controls">
+      <div class="segmented-control">
+        <button
+          :class="{ active: mode === 'multiplication' }"
+          @click="mode = 'multiplication'"
+        >
+          Умножение ×
+        </button>
+        <button
+          :class="{ active: mode === 'division' }"
+          @click="mode = 'division'"
+        >
+          Деление :
+        </button>
       </div>
     </div>
 
-    <div class="grid-scroll-area">
-      <div class="pythagoras-grid">
-        <div class="grid-row header-row">
-          <div class="cell corner-cell">×</div>
-          <div v-for="col in 10" :key="'h'+col" class="cell header-cell">{{ col }}</div>
+    <div class="grid-wrapper">
+
+      <div class="header-row">
+        <div class="corner-cell"></div>
+        <div v-for="col in 10" :key="col" class="header-cell">{{ col }}</div>
+      </div>
+
+      <div v-for="row in 10" :key="row" class="grid-row">
+        <div class="row-header">{{ row }}</div>
+
+        <div
+          v-for="col in 10"
+          :key="col"
+          class="stat-cell"
+          :class="getCellClass(row, col)"
+          @click="showDetails(row, col)"
+        >
+          <div v-if="getCellClass(row, col) === 'diamond'" class="diamond-icon">💎</div>
+          <div v-else class="status-dot"></div>
         </div>
+      </div>
+    </div>
 
-        <div v-for="row in 10" :key="'r'+row" class="grid-row">
-          <div class="cell header-cell row-header">{{ row }}</div>
+    <div class="legend">
+      <div class="legend-row">
+        <div class="legend-item"><div class="dot gray"></div><span>Нет данных</span></div>
+        <div class="legend-item"><div class="dot red"></div><span>Ошибка</span></div>
+        <div class="legend-item"><div class="dot yellow"></div><span>&lt; 5 раз</span></div>
+      </div>
+      <div class="legend-row">
+        <div class="legend-item"><div class="dot green"></div><span>&gt; 5 раз</span></div>
+        <div class="legend-item"><div class="diamond-legend">💎</div><span>Мастер (20+)</span></div>
+      </div>
+    </div>
 
-          <div
-            v-for="col in 10"
-            :key="row+'-'+col"
-            class="cell stat-cell"
-            :class="getCellClass(row, col)"
-            @click="showDetail(row, col)"
-          >
-            <span v-if="isMastered(row, col)" class="star">★</span>
+    <transition name="fade">
+      <div v-if="selectedCell" class="modal-backdrop" @click="selectedCell = null">
+        <div class="modal-card" @click.stop>
+          <h3>{{ selectedCell.title }}</h3>
+
+          <div class="rank-badge" :class="selectedCell.rankClass">
+            {{ selectedCell.rankText }}
           </div>
+
+          <div class="stats-info">
+            <div class="stat-row green">
+              <span>Решено верно:</span>
+              <strong>{{ selectedCell.correct }}</strong>
+            </div>
+            <div class="stat-row red">
+              <span>Ошибок сейчас:</span>
+              <strong>{{ selectedCell.wrong }}</strong>
+            </div>
+          </div>
+          <button class="close-btn" @click="selectedCell = null">Закрыть</button>
         </div>
       </div>
-    </div>
+    </transition>
 
-    <div class="legend-card">
-      <div class="legend-row">
-        <div class="legend-item"><span class="dot grey"></span> Не решал</div>
-        <div class="legend-item"><span class="dot yellow"></span> Учу</div>
-      </div>
-      <div class="legend-row">
-        <div class="legend-item"><span class="dot green"></span> Знаю</div>
-        <div class="legend-item"><span class="dot gold"></span> Мастер ★</div>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref } from 'vue';
 import { useNavigationStore } from '../stores/navigation';
+import { useProgressStore } from '../stores/progress';
+
 const nav = useNavigationStore();
+const progress = useProgressStore();
 
-interface StatData {
-  [key: string]: { c: number; w: number };
-}
+type StatMode = 'multiplication' | 'division';
+const mode = ref<StatMode>('multiplication');
 
-const stats = ref<StatData>({});
+const selectedCell = ref<{
+  title: string,
+  correct: number,
+  wrong: number,
+  rankText: string,
+  rankClass: string
+} | null>(null);
 
-onMounted(() => {
-  const saved = localStorage.getItem('multiplicationStats');
-  if (saved) {
-    stats.value = JSON.parse(saved);
+const getStatData = (row: number, col: number) => {
+  if (mode.value === 'multiplication') {
+    return progress.getStat(row, col);
+  } else {
+    const dividend = row * col;
+    const divisor = row;
+    return progress.getDivisionStat(dividend, divisor);
   }
-});
-
-const getStat = (a: number, b: number) => {
-  return stats.value[`${a}x${b}`] || { c: 0, w: 0 };
 };
 
-const getCellClass = (r: number, c: number) => {
-  const s = getStat(r, c);
-  const total = s.c + s.w;
+// --- НОВАЯ ЛОГИКА ГРАДАЦИЙ ---
+const getCellClass = (row: number, col: number) => {
+  const stat = getStatData(row, col);
+  const total = stat.c + stat.w;
 
-  if (total === 0) return 'empty';
-
-  if (s.c > 10 && s.w === 0) return 'gold';
-  if (s.c > 5) return 'green';
-  if (s.c > 0) return 'yellow';
-  return 'red';
+  if (total === 0) return 'empty';           // 0. Не решали
+  if (stat.w > 0) return 'error';            // 1. Есть активная ошибка (Красный)
+  if (stat.c >= 20) return 'diamond';        // 4. Мастер (Алмаз)
+  if (stat.c >= 5) return 'mastered';        // 3. Знаток (Зеленый)
+  return 'novice';                           // 2. Новичок (Желтый)
 };
 
-const isMastered = (r: number, c: number) => {
-  return getCellClass(r, c) === 'gold';
+const getRankInfo = (c: number, w: number) => {
+  if (w > 0) return { text: 'Нужно исправить 🩹', class: 'text-red' };
+  if (c >= 20) return { text: 'Абсолютный Мастер 💎', class: 'text-blue' };
+  if (c >= 5) return { text: 'Знаток 🧠', class: 'text-green' };
+  if (c > 0) return { text: 'Новичок 🐣', class: 'text-yellow' };
+  return { text: 'Не решено', class: 'text-gray' };
 };
 
-const showDetail = (r: number, c: number) => {
-  console.log(`${r} x ${c}`);
+const showDetails = (row: number, col: number) => {
+  const stat = getStatData(row, col);
+  let title = '';
+
+  if (mode.value === 'multiplication') {
+    title = `${row} × ${col} = ${row * col}`;
+  } else {
+    title = `${row * col} : ${row} = ${col}`;
+  }
+
+  const rank = getRankInfo(stat.c, stat.w);
+
+  selectedCell.value = {
+    title,
+    correct: stat.c,
+    wrong: stat.w,
+    rankText: rank.text,
+    rankClass: rank.class
+  };
 };
 </script>
 
@@ -91,178 +159,251 @@ const showDetail = (r: number, c: number) => {
 * { box-sizing: border-box; }
 
 .stats-container {
-  min-height: 100vh;
-  padding: 15px;
-  display: flex;
-  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  width: 100%;
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 10px;
   background-color: #f4f6f8;
+  min-height: 100vh;
+  color: #333;
 }
 
-/* --- Хедер --- */
+/* --- ИСПРАВЛЕННАЯ ШАПКА (КАК ВЕЗДЕ) --- */
 .top-bar {
-  position: sticky;
+  position: sticky; /* Делаем липкой, как в игре */
   top: 0;
-  z-index: 10;
-  background-color: #f4f6f8;
-  padding: 10px 0;
-  margin: 0 0 20px 0; /* Убираем отрицательные маржины если были */
+  z-index: 100;
+  background-color: rgba(244, 246, 248, 0.95);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+
+  /* Компенсация отступов родителя, чтобы шапка была во всю ширину */
+  margin: -10px -10px 15px -10px;
+  padding: 10px 15px;
+  width: auto;
 
   display: flex;
   align-items: center;
-  gap: 15px;
-  width: 100%;
+  gap: 10px; /* Отступ между стрелкой и текстом */
 }
 
 .back-btn {
   background: white;
   border: none;
-  width: 44px; height: 44px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  font-size: 22px;
+  font-size: 20px;
   color: #2c3e50;
   cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+
+  flex-shrink: 0; /* Чтобы кнопка не сплющивалась */
+  /* Убрали position: absolute */
+}
+
+h1 {
+  flex-grow: 1;
+  text-align: left; /* Текст слева */
+  font-size: 1.2rem; /* Размер как в игре */
+  margin: 0;
+  color: #2c3e50;
+}
+
+/* Переключатель */
+.controls {
+  margin-bottom: 20px;
+}
+.segmented-control {
+  display: flex;
+  background: #e0e0e0;
+  padding: 4px;
+  border-radius: 12px;
+}
+.segmented-control button {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 8px 0;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #7f8c8d;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.segmented-control button.active {
+  background: white;
+  color: #333;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Сетка */
+.grid-wrapper {
+  background: white;
+  border-radius: 16px;
+  padding: 10px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+  overflow-x: auto;
+}
+
+.header-row {
+  display: flex;
+  margin-bottom: 5px;
+}
+.corner-cell {
+  width: 30px;
   flex-shrink: 0;
 }
-
-.title-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.title-group h1 {
-  font-size: 1.4rem;
-  color: #2c3e50;
-  margin: 0;
-  line-height: 1.1;
-}
-
-.subtitle {
-  font-size: 0.85rem;
-  color: #7f8c8d;
-  margin: 2px 0 0 0;
-  font-weight: 500;
-}
-
-/* --- Сетка --- */
-.grid-scroll-area {
-  flex-grow: 1;
-  width: 100%;
-  /* Магия для скролла: */
-  overflow-x: auto;
-  display: flex;
-  /* Важно: НЕ используем justify-content: center здесь, иначе обрежет левый край */
-  padding-bottom: 20px;
-  /* Убираем стандартный скроллбар для красоты */
-  scrollbar-width: none;
-}
-.grid-scroll-area::-webkit-scrollbar { display: none; }
-
-.pythagoras-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  /* margin: auto позволяет центрировать, если влезает, и выровнять слева, если нет */
-  margin: 0 auto;
-  min-width: fit-content; /* Чтобы контейнер не сжимался */
-  padding: 0 5px; /* Небольшой отступ с краев */
+.header-cell {
+  flex: 1;
+  text-align: center;
+  font-weight: bold;
+  color: #95a5a6;
+  font-size: 0.8rem;
 }
 
 .grid-row {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.row-header {
+  width: 30px;
+  text-align: center;
+  font-weight: bold;
+  color: #95a5a6;
+  font-size: 0.8rem;
+  flex-shrink: 0;
 }
 
-.cell {
-  width: 32px; /* Фиксированная ширина */
-  height: 32px; /* Фиксированная высота */
+.stat-cell {
+  flex: 1;
+  aspect-ratio: 1;
+  margin: 0 2px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: bold;
-  flex-shrink: 0; /* ЗАПРЕТ НА СЖАТИЕ */
-  transition: transform 0.1s;
-}
-
-/* Стили заголовков (синие) */
-.header-cell {
-  background-color: #3498db;
-  color: white;
-  box-shadow: 0 2px 4px rgba(52, 152, 219, 0.2);
-}
-
-.corner-cell {
-  background-color: transparent;
-  color: #bdc3c7;
-  font-size: 16px;
-}
-
-/* Стили ячеек данных */
-.stat-cell {
   cursor: pointer;
-  border: 1px solid rgba(0,0,0,0.03);
+  transition: transform 0.1s;
 }
 .stat-cell:active { transform: scale(0.9); }
 
-/* Звездочка */
-.star {
-  font-size: 10px;
-  color: white;
-  text-shadow: 0 1px 1px rgba(0,0,0,0.3);
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
 }
+.diamond-icon { font-size: 10px; animation: pulse 2s infinite; }
 
-/* Цвета статусов */
-.empty { background-color: #ecf0f1; color: #bdc3c7; }
-.yellow { background-color: #f1c40f; color: white; border: none; }
-.green { background-color: #2ecc71; color: white; border: none; }
-.red { background-color: #e74c3c; color: white; border: none; }
-.gold {
-  background: linear-gradient(135deg, #f1c40f, #f39c12);
-  color: white;
-  border: 1px solid #e67e22;
-  box-shadow: inset 0 0 4px rgba(255, 255, 255, 0.4);
-}
+/* Цвета градаций */
+.stat-cell.empty { background: #f0f2f5; }
+.stat-cell.empty .status-dot { background: #dcdde1; }
 
-/* --- Легенда --- */
-.legend-card {
-  background: white;
-  padding: 15px;
-  border-radius: 16px;
-  box-shadow: 0 -2px 15px rgba(0,0,0,0.03);
-  margin-top: auto;
-  width: 100%;
-  max-width: 400px;
-  align-self: center; /* Центрируем саму карточку легенды */
-}
+.stat-cell.error { background: #fadbd8; }
+.stat-cell.error .status-dot { background: #e74c3c; }
 
-.legend-row {
+.stat-cell.novice { background: #fef9e7; }
+.stat-cell.novice .status-dot { background: #f1c40f; }
+
+.stat-cell.mastered { background: #d4efdf; }
+.stat-cell.mastered .status-dot { background: #27ae60; }
+
+.stat-cell.diamond { background: #d6eaf8; border: 1px solid #aed6f1; }
+.stat-cell.diamond .status-dot { display: none; }
+
+/* Легенда */
+.legend {
+  margin-top: 20px;
   display: flex;
-  justify-content: space-around;
-  margin-bottom: 8px;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  padding-bottom: 20px; /* Отступ снизу */
 }
-.legend-row:last-child { margin-bottom: 0; }
+.legend-row { display: flex; gap: 15px; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: #7f8c8d; }
+.dot { width: 10px; height: 10px; border-radius: 50%; }
+.dot.gray { background: #dcdde1; }
+.dot.red { background: #e74c3c; }
+.dot.yellow { background: #f1c40f; }
+.dot.green { background: #27ae60; }
+.diamond-legend { font-size: 12px; }
 
-.legend-item {
+/* Модалка */
+.modal-backdrop {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4);
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 0.85rem;
-  color: #555;
-  min-width: 90px;
+  justify-content: center;
+  z-index: 200;
+  backdrop-filter: blur(4px);
+}
+.modal-card {
+  background: white;
+  padding: 25px;
+  border-radius: 20px;
+  width: 80%;
+  max-width: 300px;
+  text-align: center;
+  animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.modal-card h3 {
+  margin: 0 0 10px 0;
+  font-size: 1.5rem;
+  color: #2c3e50;
 }
 
-.dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  display: block;
+.rank-badge {
+  display: inline-block; padding: 4px 12px; border-radius: 12px;
+  font-weight: bold; font-size: 0.9rem; margin-bottom: 20px;
+}
+.text-red { background: #fadbd8; color: #c0392b; }
+.text-yellow { background: #fcf3cf; color: #f39c12; }
+.text-green { background: #d4efdf; color: #27ae60; }
+.text-blue { background: #d6eaf8; color: #2980b9; }
+.text-gray { background: #f0f2f5; color: #7f8c8d; }
+
+.stats-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+.stat-row.green { background: #d4efdf; color: #27ae60; }
+.stat-row.red { background: #fadbd8; color: #e74c3c; }
+
+.close-btn {
+  background: #34495e;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  width: 100%;
 }
 
-.dot.grey { background: #ecf0f1; border: 1px solid #ccc; }
-.dot.yellow { background: #f1c40f; }
-.dot.green { background: #2ecc71; }
-.dot.gold { background: linear-gradient(135deg, #f1c40f, #f39c12); }
+@keyframes popIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>
