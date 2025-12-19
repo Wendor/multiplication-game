@@ -53,6 +53,7 @@
         {{ score }}
       </div>
       <p v-if="isBlitz" class="subtitle">примеров решено</p>
+      <p v-else class="subtitle">из {{ total }}</p>
 
       <p v-if="score > highScore" class="new-record">🏆 Новый рекорд!</p>
       <p v-else class="encouragement">Молодец!</p>
@@ -90,13 +91,14 @@ const { playCorrect, playWrong, playWin, runConfetti } = useGameEffects();
 // --- Логика Таймера ---
 const totalTime = 60;
 const timeLeft = ref(totalTime);
-// ИСПРАВЛЕНО: Заменили any на number | null
-let timerInterval: number | null = null;
+// Используем number, так как window.setInterval возвращает число ID
+let timerInterval: number | undefined = undefined;
 
 const startTimer = () => {
-  if (!props.isBlitz) return;
+  stopTimer(); // Сбрасываем предыдущий, если был
   timeLeft.value = totalTime;
-  // setInterval возвращает число в браузере
+
+  // Явно используем window.setInterval, чтобы TS понимал, что это браузер
   timerInterval = window.setInterval(() => {
     timeLeft.value--;
     if (timeLeft.value <= 0) {
@@ -107,33 +109,54 @@ const startTimer = () => {
 };
 
 const stopTimer = () => {
-  if (timerInterval) {
+  if (timerInterval !== undefined) {
     clearInterval(timerInterval);
-    timerInterval = null;
+    timerInterval = undefined;
   }
 };
 
+// Запуск при монтировании (первый вход)
 onMounted(() => {
-  if (props.isBlitz) startTimer();
+  if (props.isBlitz && !props.finished) startTimer();
 });
+
+// Очистка при уходе
 onUnmounted(() => stopTimer());
-// ----------------------
 
-watch(() => props.question, () => {
-  isAnswered.value = false;
-  selectedOption.value = null;
+// --- Watchers (Наблюдатели) ---
+
+// 1. Следим за режимом Блиц (если переключились на лету)
+watch(() => props.isBlitz, (newVal) => {
+  if (newVal && !props.finished) startTimer();
+  else stopTimer();
 });
 
+// 2. Следим за концом игры (и рестартом)
 watch(() => props.finished, (isFinished) => {
   if (isFinished) {
+    // Игра закончилась
     stopTimer();
+
+    // Салют
     const threshold = props.isBlitz ? 15 : (props.total - 1);
     if (props.score >= threshold) {
       playWin();
       runConfetti();
     }
+  } else {
+    // Игра перезапущена (нажали "Ещё раз")
+    if (props.isBlitz) {
+      startTimer();
+    }
   }
 });
+
+// 3. Сброс состояния вопроса при смене вопроса
+watch(() => props.question, () => {
+  isAnswered.value = false;
+  selectedOption.value = null;
+});
+// ----------------------
 
 const handleAnswerClick = async (option: number) => {
   if (isAnswered.value || !props.question) return;
@@ -148,6 +171,7 @@ const handleAnswerClick = async (option: number) => {
 
   emit('answer', isCorrect);
 
+  // В Блице задержка меньше (0.5с), чтобы быстрее решать
   const delay = props.isBlitz ? 500 : 1000;
   await new Promise(resolve => setTimeout(resolve, delay));
 
@@ -164,7 +188,6 @@ const getButtonClass = (option: number) => {
 </script>
 
 <style scoped>
-/* Те же стили + новые для блица */
 .test-area-container { width: 100%; display: flex; flex-direction: column; align-items: center; }
 .content-wrapper { width: 100%; display: flex; flex-direction: column; align-items: center; }
 .progress-wrapper { margin-bottom: 25px; padding: 0 5px; width: 100%; max-width: 400px; }

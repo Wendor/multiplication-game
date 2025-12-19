@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 
-export type Scene = 'menu' | 'multiplication' | 'sumsub' | 'division' | 'stats';
+export type Scene = 'menu' | 'multiplication' | 'sumsub' | 'division' | 'stats' | 'achievements';
 
 export const useNavigationStore = defineStore('navigation', () => {
   const currentScene = ref<Scene>('menu');

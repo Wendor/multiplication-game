@@ -3,14 +3,15 @@
     <div class="top-bar">
       <button class="back-btn" @click="nav.goBack()">←</button>
       <h1>Умножение</h1>
-      <div class="header-stats">🏆 {{ progress.totalSolved }}</div>
+      <div class="header-stats" v-if="mode === 'blitz'">⚡ {{ blitzHighScore }}</div>
+      <div class="header-stats" v-else>🏆 {{ progress.totalSolved }}</div>
     </div>
 
     <div class="controls-area">
       <div class="segmented-control">
+        <button :class="{ active: mode === 'learning' }" @click="setMode('learning')">Учить</button>
         <button :class="{ active: mode === 'test' }" @click="setMode('test')">Тест</button>
         <button :class="{ active: mode === 'blitz' }" @click="setMode('blitz')">⚡ Блиц</button>
-        <button :class="{ active: mode === 'learning' }" @click="setMode('learning')">Учить</button>
       </div>
 
       <transition name="fade">
@@ -55,6 +56,7 @@
           </label>
           <span class="toggle-text">Скрыть ответы</span>
         </div>
+
         <transition name="slide-up-fade" mode="out-in">
           <div :key="activeTable" class="single-table-view">
             <h2 class="table-title">Таблица на {{ activeTable }}</h2>
@@ -68,6 +70,7 @@
             </div>
           </div>
         </transition>
+
         <div class="visualizer-backdrop" v-if="selectedFact" @click="selectedFact = null"></div>
         <transition name="slide-up-panel">
           <div class="visualizer-panel" v-if="selectedFact">
@@ -91,25 +94,11 @@
 
       <div v-else key="test" class="test-wrapper">
 
-        <div class="test-settings" v-if="!testFinished">
+        <div class="test-settings" v-if="!testFinished && mode === 'test'">
           <div class="number-nav compact-nav">
-            <button
-              class="nav-pill"
-              :class="{ active: testTarget === 'mix' }"
-              @click="setTestTarget('mix')"
-            >
-              🔀 Микс
-            </button>
-
-            <button
-              v-for="i in 10"
-              :key="i"
-              class="nav-circle small"
-              :class="{ active: testTarget === i }"
-              @click="setTestTarget(i)"
-            >
+            <button class="nav-pill" :class="{ active: testTarget === 'mix' }" @click="setTestTarget('mix')">🔀 Микс</button>
+            <button v-for="i in 10" :key="i" class="nav-circle small" :class="{ active: testTarget === i }" @click="setTestTarget(i)">
               {{ i }}
-
               <div class="medal-icon small-medal" v-if="progress.getMedalForNumber(i) === 3">🥇</div>
               <div class="medal-icon small-medal" v-else-if="progress.getMedalForNumber(i) === 2">🥈</div>
               <div class="medal-icon small-medal" v-else-if="progress.getMedalForNumber(i) === 1">🥉</div>
@@ -160,7 +149,7 @@ import { useProgressStore } from '../stores/progress';
 const nav = useNavigationStore();
 const progress = useProgressStore();
 
-type Mode = 'learning' | 'test' | 'blitz' | 'mistakes'; // Новые режимы
+type Mode = 'learning' | 'test' | 'blitz' | 'mistakes';
 type TestTarget = 'mix' | number;
 interface Question { a: number; b: number; correctAnswer: number; options: number[]; }
 interface Difficulty { shortLabel: string; max: number; }
@@ -181,13 +170,13 @@ const questions = reactive<Question[]>([]);
 const hideAnswers = ref(false);
 const selectedFact = ref<Fact | null>(null);
 
+// Таймер для ачивки "Скорость"
+const questionStartTime = ref(0);
+
 const highScore = computed(() => progress.multiplicationHighScore);
 const blitzHighScore = computed(() => progress.blitzHighScore);
-
-// Проверка на наличие ошибок
 const mistakesCount = computed(() => progress.getMistakes().length);
 const hasMistakes = computed(() => mistakesCount.value > 0);
-
 const currentQuestion = computed(() => questions[currentQuestionIndex.value]);
 
 const currentQuestionForProps = computed(() => {
@@ -205,14 +194,12 @@ watch(maxNumber, (newMax) => {
 });
 
 // --- ГЕНЕРАЦИЯ ---
-
 const generateTest = () => {
   questions.length = 0;
 
   // 1. РЕЖИМ ОШИБОК
   if (mode.value === 'mistakes') {
-    const errors = progress.getMistakes();
-    // Берем до 10 ошибок, перемешиваем
+    const errors: {a: number, b: number}[] = progress.getMistakes();
     errors.sort(() => Math.random() - 0.5);
     const selected = errors.slice(0, 10);
 
@@ -220,16 +207,14 @@ const generateTest = () => {
        const ans = p.a * p.b;
        questions.push({ a: p.a, b: p.b, correctAnswer: ans, options: generateOptions(ans) });
     });
+    // Запускаем таймер первого вопроса
+    questionStartTime.value = Date.now();
     return;
   }
 
-  // 2. БЛИЦ: Генерируем бесконечно (ну или 100 вопросов, хватит на минуту)
-  // 3. ТЕСТ: Генерируем 10 умных
-
   const limit = mode.value === 'blitz' ? 100 : 10;
-
-  // (Логика WeightedFact как в прошлом ответе)
   const candidates: WeightedFact[] = [];
+
   if (testTarget.value === 'mix' || mode.value === 'blitz') {
     for (let i = 2; i <= maxNumber.value; i++) {
       for (let j = i; j <= maxNumber.value; j++) candidates.push(createWeightedFact(i, j));
@@ -243,7 +228,6 @@ const generateTest = () => {
     if (candidates.length === 0) break;
     const selected = pickWeighted(candidates);
 
-    // В блице можно повторять, в тесте лучше нет
     if (mode.value !== 'blitz') {
       const index = candidates.indexOf(selected);
       if (index > -1) candidates.splice(index, 1);
@@ -256,14 +240,15 @@ const generateTest = () => {
 
     questions.push({ a: finalA, b: finalB, correctAnswer: ans, options: generateOptions(ans) });
   }
+
+  // Запускаем таймер первого вопроса
+  questionStartTime.value = Date.now();
 };
 
-// ... (createWeightedFact, pickWeighted, generateOptions, getRandomInt - скопируйте из прошлого ответа или оставьте те, что уже внедрили)
 const createWeightedFact = (a: number, b: number): WeightedFact => {
   const stat = progress.getStat(a, b);
-  const statReverse = progress.getStat(b, a);
-  const wrong = stat.w + statReverse.w;
-  const correct = stat.c + statReverse.c;
+  const wrong = stat.w;
+  const correct = stat.c;
   let weight = 10;
   if (wrong > 0) weight += (wrong * 50);
   if (correct > 5 && wrong === 0) weight = 1; else if (correct > 2) weight = 5;
@@ -284,24 +269,28 @@ const getRowWord = (num: number) => { const lastDigit = num % 10; if (num > 10 &
 const getRandomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 const generateOptions = (correct: number) => { const s = new Set<number>(); s.add(correct); while (s.size < 4) { const dev = getRandomInt(-5, 5); const w = correct + dev; if (w > 0 && w !== correct) s.add(w); } return Array.from(s).sort(() => Math.random() - 0.5); };
 
-
 // --- Handlers ---
 
 const onAnswer = (isCorrect: boolean) => {
   if (!currentQuestion.value) return;
+
+  // Считаем время
+  const timeTaken = Date.now() - questionStartTime.value;
 
   if (isCorrect) {
     score.value++;
     progress.incrementTotalSolved();
   }
 
-  progress.saveStat(currentQuestion.value.a, currentQuestion.value.b, isCorrect);
+  // Сохраняем стату + передаем время для ачивки "Гонщик"
+  progress.saveStat(currentQuestion.value.a, currentQuestion.value.b, isCorrect, timeTaken);
 };
 
 const onNext = () => {
-  // В блице идем пока есть вопросы (их 100), конец игры по таймеру
   if (currentQuestionIndex.value < questions.length - 1) {
     currentQuestionIndex.value++;
+    // Сброс таймера для следующего
+    questionStartTime.value = Date.now();
   } else {
     finishGame();
   }
@@ -313,6 +302,10 @@ const finishGame = () => {
      progress.checkNewRecord('blitz', score.value);
   } else if (mode.value === 'test') {
      progress.checkNewRecord('multiplication', score.value);
+     // Ачивка "Перфекционист"
+     if (score.value === 10) {
+       progress.registerPerfectTest();
+     }
   }
 };
 
@@ -338,45 +331,20 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* Все стили из прошлого ответа + стили для медалей и кнопки ошибок */
 * { box-sizing: border-box; }
-.game-container {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  width: 100%;
-  max-width: 500px;
-  margin: 0 auto;
-  padding: 10px;
-  background-color: #f4f6f8;
-  min-height: 100vh;
-  color: #333;
-  /* УДАЛЕНО: overflow-x: hidden; — это ломало sticky */
-}
+.game-container { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; width: 100%; max-width: 500px; margin: 0 auto; padding: 10px; background-color: #f4f6f8; min-height: 100vh; color: #333; }
 
 .top-bar {
-  /* Логика прилипания */
-  position: sticky;
-  top: 0;
-  z-index: 100;
-
-  /* Фон (полупрозрачный с размытием для красоты) */
-  background-color: rgba(244, 246, 248, 0.95);
-  backdrop-filter: blur(10px);
+  position: sticky; top: 0; z-index: 100;
+  background-color: rgba(244, 246, 248, 0.95); backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(0,0,0,0.05);
-
-  /* Компенсация padding: 10px у родителя .game-container */
-  /* Растягиваем шапку на всю ширину и прижимаем к верху */
-  margin: -10px -10px 15px -10px;
-  padding: 10px 15px; /* Внутренние отступы */
-  width: calc(100% + 20px); /* Ширина 100% + 20px (компенсация отступов) */
-
-  /* Flexbox */
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  margin: -10px -10px 15px -10px; padding: 10px 15px; width: calc(100% + 20px);
+  display: flex; align-items: center; gap: 10px;
 }
 .back-btn { background: white; border: none; width: 40px; height: 40px; border-radius: 50%; font-size: 20px; color: #2c3e50; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
 h1 { font-size: 1.2rem; margin: 0; color: #2c3e50; flex-grow: 1; }
 .header-stats { background: #ffecb3; color: #d35400; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 0.9rem; white-space: nowrap; }
+
 .controls-area { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
 .segmented-control { display: flex; width: 100%; background: #e0e0e0; padding: 4px; border-radius: 12px; }
 .segmented-control button { flex: 1; border: none; background: transparent; padding: 8px 0; border-radius: 8px; font-weight: 600; font-size: 0.9rem; color: #7f8c8d; cursor: pointer; }
@@ -385,49 +353,17 @@ h1 { font-size: 1.2rem; margin: 0; color: #2c3e50; flex-grow: 1; }
 .chips-row { display: flex; width: 100%; gap: 8px; }
 .chip { flex: 1; background: white; border: 1px solid #ddd; padding: 8px 0; border-radius: 12px; font-size: 0.85rem; cursor: pointer; color: #555; text-align: center; white-space: nowrap; transition: all 0.2s; }
 .chip.active { background: #3498db; color: white; border-color: #3498db; }
-
-/* Кнопка ошибок */
-.mistakes-btn {
-  background: #e74c3c;
-  color: white;
-  border: none;
-  border-radius: 12px;
-  padding: 10px;
-  font-weight: bold;
-  cursor: pointer;
-  animation: pulse 2s infinite;
-}
-
+.mistakes-btn { background: #e74c3c; color: white; border: none; border-radius: 12px; padding: 10px; font-weight: bold; cursor: pointer; animation: pulse 2s infinite; }
 @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
 
-/* Медальки на навигации */
+/* Навигация с медалями */
 .number-nav { display: flex; overflow-x: auto; gap: 8px; padding: 10px 5px; margin: 0 -10px 10px -10px; padding-left: 10px; padding-right: 10px; scrollbar-width: none; -ms-overflow-style: none; }
 .nav-circle { position: relative; flex: 0 0 44px; height: 44px; border-radius: 50%; background: white; border: 2px solid #eee; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: bold; color: #555; transition: transform 0.2s; }
 .nav-circle.active { background: #3498db; color: white; border-color: #3498db; transform: scale(1.1); box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3); }
+.medal-icon { position: absolute; top: -8px; right: -8px; font-size: 14px; background: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); pointer-events: none; }
+.small-medal { width: 16px; height: 16px; font-size: 10px; top: -5px; right: -5px; }
 
-.medal-icon {
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  font-size: 14px;
-  background: white;
-  border-radius: 50%;
-  width: 20px; height: 20px;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  pointer-events: none; /* Чтобы клик проходил сквозь иконку */
-}
-
-/* Уменьшенная медалька (для теста, где кнопки small) */
-.small-medal {
-  width: 16px;
-  height: 16px;
-  font-size: 10px;
-  top: -5px;
-  right: -5px;
-}
-
-/* Остальные стили (table-row, visualizer и т.д.) - они не менялись, скопируйте из прошлых ответов */
+/* Остальные стили */
 .nav-pill { flex: 0 0 auto; padding: 0 16px; height: 44px; border-radius: 22px; background: white; border: 2px solid #eee; font-weight: bold; color: #555; display: flex; align-items: center; justify-content: center; }
 .nav-pill.active { background: #9b59b6; color: white; border-color: #8e44ad; }
 .single-table-view { background: white; border-radius: 16px; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
