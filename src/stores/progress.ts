@@ -86,7 +86,7 @@ export const useProgressStore = defineStore('progress', () => {
   const stages = [
     { lvl: 0, emoji: '🥚', title: 'Яйцо' },
     { lvl: 2, emoji: '🐣', title: 'Цыплёнок' },
-    { lvl: 5, emoji: '🦊', title: 'Лисёнок' },
+    { lvl: 5, emoji: '🦊', title: 'Лисенок' },
     { lvl: 10, emoji: '🦉', title: 'Мудрая Сова' },
     { lvl: 15, emoji: '🎓', title: 'Профессор' },
     { lvl: 20, emoji: '🦅', title: 'Орел' },
@@ -98,14 +98,11 @@ export const useProgressStore = defineStore('progress', () => {
   ];
 
   const checkDailyProgress = () => {
-    // ИСПРАВЛЕНИЕ: Добавляем 'as string', так как уверены, что дата есть
     const today = new Date().toISOString().split('T')[0] as string;
-
     if (lastVisitDate.value !== today) {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0] as string; // Здесь тоже полезно добавить
-
+      const yesterdayStr = yesterday.toISOString().split('T')[0] as string;
       if (lastVisitDate.value === yesterdayStr) {
         dailyStreak.value++;
       } else {
@@ -115,7 +112,6 @@ export const useProgressStore = defineStore('progress', () => {
     }
   };
 
-  // --- INIT ---
   const init = () => {
     const multHS = localStorage.getItem('multiplicationHighScore');
     if (multHS) multiplicationHighScore.value = parseInt(multHS, 10);
@@ -149,20 +145,19 @@ export const useProgressStore = defineStore('progress', () => {
     const streak = localStorage.getItem('dailyStreak');
     if (streak) dailyStreak.value = parseInt(streak, 10);
 
+    const streakCurr = localStorage.getItem('currentStreak'); // Загрузка стрика
+    if (streakCurr) currentStreak.value = parseInt(streakCurr, 10);
+
     const lastDate = localStorage.getItem('lastVisitDate');
     if (lastDate) lastVisitDate.value = lastDate;
 
     const corrected = localStorage.getItem('mistakesCorrected');
     if (corrected) mistakesCorrected.value = parseInt(corrected, 10);
 
-    const streakLocal = localStorage.getItem('currentStreak');
-    if (streakLocal) currentStreak.value = parseInt(streakLocal, 10);
-
     checkDailyProgress();
   };
 
   // --- WATCHERS ---
-  watch(currentStreak, (val) => localStorage.setItem('currentStreak', val.toString()));
   watch(multiplicationHighScore, (val) => localStorage.setItem('multiplicationHighScore', val.toString()));
   watch(sumSubHighScore, (val) => localStorage.setItem('sumSubHighScore', val.toString()));
   watch(divisionHighScore, (val) => localStorage.setItem('divisionHighScore', val.toString()));
@@ -170,9 +165,9 @@ export const useProgressStore = defineStore('progress', () => {
   watch(totalSolved, (val) => localStorage.setItem('totalSolved', val.toString()));
   watch(perfectTestCount, (val) => localStorage.setItem('perfectTestCount', val.toString()));
   watch(dailyStreak, (val) => localStorage.setItem('dailyStreak', val.toString()));
-  // ИСПРАВЛЕНИЕ: добавлено as string
   watch(lastVisitDate, (val) => localStorage.setItem('lastVisitDate', val as string));
   watch(mistakesCorrected, (val) => localStorage.setItem('mistakesCorrected', val.toString()));
+  watch(currentStreak, (val) => localStorage.setItem('currentStreak', val.toString()));
 
   watch(multiplicationStats, (val) => localStorage.setItem('multiplicationStats', JSON.stringify(val)), { deep: true });
   watch(divisionStats, (val) => localStorage.setItem('divisionStats', JSON.stringify(val)), { deep: true });
@@ -181,7 +176,6 @@ export const useProgressStore = defineStore('progress', () => {
   watch(isMuted, (val) => localStorage.setItem('isMuted', JSON.stringify(val)));
 
 
-  // --- GETTERS ---
   const currentLevel = computed(() => Math.floor(Math.sqrt(totalSolved.value / 5)) + 1);
   const levelProgress = computed(() => {
     const currentLvl = currentLevel.value;
@@ -200,7 +194,7 @@ export const useProgressStore = defineStore('progress', () => {
     return stage || stages[0];
   });
 
-  // Вспомогательная функция для медалей умножения
+  // --- ЛОГИКА МЕДАЛЕЙ ---
   const calcMedal = (num: number) => {
     let masteredFacts = 0; let attemptedFacts = 0;
     for (let i = 1; i <= 10; i++) {
@@ -220,6 +214,24 @@ export const useProgressStore = defineStore('progress', () => {
       const dividend = i * divisor;
       const key = `${dividend}:${divisor}`;
       const s = divisionStats.value[key];
+      if (s) { if (s.c > 0 || s.w > 0) attemptedFacts++; if (s.c >= 5 && s.w === 0) masteredFacts++; }
+    }
+    if (masteredFacts === 10) return 3;
+    if (attemptedFacts === 10 && masteredFacts >= 5) return 2;
+    if (attemptedFacts === 10) return 1;
+    return 0;
+  };
+
+  // НОВОЕ: Расчет медалей для сложения
+  // Для таблицы "2" проверяем 2+1, 2+2 ... 2+10
+  const calcSumSubMedal = (num: number) => {
+    let masteredFacts = 0; let attemptedFacts = 0;
+    for (let i = 1; i <= 10; i++) {
+      const min = Math.min(num, i);
+      const max = Math.max(num, i);
+      const key = `${min}+${max}`;
+      const s = sumSubStats.value[key];
+
       if (s) {
         if (s.c > 0 || s.w > 0) attemptedFacts++;
         if (s.c >= 5 && s.w === 0) masteredFacts++;
@@ -240,8 +252,12 @@ export const useProgressStore = defineStore('progress', () => {
   const checkAchievements = (timeTaken: number = 0) => {
     const now = new Date();
     let goldCount = 0;
+
+    // Считаем все золотые медали
     for (let i = 1; i <= 10; i++) {
-      if (calcMedal(i) === 3) goldCount++;
+      if (calcMedal(i) === 3) goldCount++; // Умножение
+      if (calcDivisionMedal(i) === 3) goldCount++; // Деление
+      if (calcSumSubMedal(i) === 3) goldCount++; // Сложение (НОВОЕ)
     }
 
     const state: AchievementState = {
@@ -272,85 +288,37 @@ export const useProgressStore = defineStore('progress', () => {
   const incrementTotalSolved = () => { totalSolved.value++; checkDailyProgress(); checkAchievements(); };
 
   const saveStat = (a: number, b: number, isCorrect: boolean, timeTaken: number = 0) => {
-    if (isCorrect) currentStreak.value++;
-    else currentStreak.value = 0;
-
-    const min = Math.min(a, b);
-    const max = Math.max(a, b);
-    const key = `${min}x${max}`;
-
+    if (isCorrect) currentStreak.value++; else currentStreak.value = 0;
+    const min = Math.min(a, b); const max = Math.max(a, b); const key = `${min}x${max}`;
     if (!multiplicationStats.value[key]) multiplicationStats.value[key] = { c: 0, w: 0 };
-
-    if (isCorrect) {
-      multiplicationStats.value[key].c++;
-      if (multiplicationStats.value[key].w > 0) mistakesCorrected.value++;
-      multiplicationStats.value[key].w = 0;
-    } else {
-      multiplicationStats.value[key].w++;
-    }
+    if (isCorrect) { multiplicationStats.value[key].c++; if (multiplicationStats.value[key].w > 0) mistakesCorrected.value++; multiplicationStats.value[key].w = 0; } else { multiplicationStats.value[key].w++; }
     checkAchievements(timeTaken);
   };
 
   const saveDivisionStat = (dividend: number, divisor: number, isCorrect: boolean, timeTaken: number = 0) => {
-    if (isCorrect) currentStreak.value++;
-    else currentStreak.value = 0;
-
+    if (isCorrect) currentStreak.value++; else currentStreak.value = 0;
     const key = `${dividend}:${divisor}`;
-
     if (!divisionStats.value[key]) divisionStats.value[key] = { c: 0, w: 0 };
-
-    if (isCorrect) {
-      divisionStats.value[key].c++;
-      if (divisionStats.value[key].w > 0) mistakesCorrected.value++;
-      divisionStats.value[key].w = 0;
-    } else {
-      divisionStats.value[key].w++;
-    }
+    if (isCorrect) { divisionStats.value[key].c++; if (divisionStats.value[key].w > 0) mistakesCorrected.value++; divisionStats.value[key].w = 0; } else { divisionStats.value[key].w++; }
     checkAchievements(timeTaken);
   };
 
   const saveSumSubStat = (a: number, b: number, op: 'plus' | 'minus', isCorrect: boolean, timeTaken: number = 0) => {
-    if (isCorrect) currentStreak.value++;
-    else currentStreak.value = 0;
-
-    let v1, v2;
-    if (op === 'plus') {
-      v1 = a;
-      v2 = b;
-    } else {
-      v1 = b;
-      v2 = a - b;
-    }
-
-    const min = Math.min(v1, v2);
-    const max = Math.max(v1, v2);
-    const key = `${min}+${max}`;
-
+    if (isCorrect) currentStreak.value++; else currentStreak.value = 0;
+    let v1, v2; if (op === 'plus') { v1 = a; v2 = b; } else { v1 = b; v2 = a - b; }
+    const min = Math.min(v1, v2); const max = Math.max(v1, v2); const key = `${min}+${max}`;
     if (!sumSubStats.value[key]) sumSubStats.value[key] = { c: 0, w: 0 };
-
-    if (isCorrect) {
-      sumSubStats.value[key].c++;
-      if (sumSubStats.value[key].w > 0) mistakesCorrected.value++;
-      sumSubStats.value[key].w = 0;
-    } else {
-      sumSubStats.value[key].w++;
-    }
+    if (isCorrect) { sumSubStats.value[key].c++; if (sumSubStats.value[key].w > 0) mistakesCorrected.value++; sumSubStats.value[key].w = 0; } else { sumSubStats.value[key].w++; }
     checkAchievements(timeTaken);
   };
 
   const getStat = (a: number, b: number) => {
-    const min = Math.min(a, b);
-    const max = Math.max(a, b);
+    const min = Math.min(a, b); const max = Math.max(a, b);
     return multiplicationStats.value[`${min}x${max}`] || { c: 0, w: 0 };
   };
-
-  const getDivisionStat = (dividend: number, divisor: number) => {
-    return divisionStats.value[`${dividend}:${divisor}`] || { c: 0, w: 0 };
-  };
-
+  const getDivisionStat = (dividend: number, divisor: number) => { return divisionStats.value[`${dividend}:${divisor}`] || { c: 0, w: 0 }; };
   const getSumSubStat = (a: number, b: number) => {
-    const min = Math.min(a, b);
-    const max = Math.max(a, b);
+    const min = Math.min(a, b); const max = Math.max(a, b);
     return sumSubStats.value[`${min}+${max}`] || { c: 0, w: 0 };
   };
 
@@ -359,12 +327,7 @@ export const useProgressStore = defineStore('progress', () => {
     for (const [key, val] of Object.entries(divisionStats.value)) {
       if (val.w > 0) {
         const parts = key.split(':');
-        if (parts.length === 2) {
-          // ИСПРАВЛЕНИЕ: as string
-          const d = parseInt(parts[0] as string, 10);
-          const div = parseInt(parts[1] as string, 10);
-          mistakes.push({ dividend: d, divisor: div });
-        }
+        if (parts.length === 2) { const d = parseInt(parts[0] as string, 10); const div = parseInt(parts[1] as string, 10); mistakes.push({ dividend: d, divisor: div }); }
       }
     }
     return mistakes;
@@ -375,12 +338,7 @@ export const useProgressStore = defineStore('progress', () => {
     for (const [key, val] of Object.entries(multiplicationStats.value)) {
       if (val.w > 0) {
         const parts = key.split('x');
-        if (parts.length === 2) {
-          // ИСПРАВЛЕНИЕ: as string
-          const a = parseInt(parts[0] as string, 10);
-          const b = parseInt(parts[1] as string, 10);
-          mistakes.push({ a, b });
-        }
+        if (parts.length === 2) { const a = parseInt(parts[0] as string, 10); const b = parseInt(parts[1] as string, 10); mistakes.push({ a, b }); }
       }
     }
     return mistakes;
@@ -388,6 +346,7 @@ export const useProgressStore = defineStore('progress', () => {
 
   const getMedalForNumber = (num: number) => calcMedal(num);
   const getDivisionMedal = (num: number) => calcDivisionMedal(num);
+  const getSumSubMedal = (num: number) => calcSumSubMedal(num); // НОВЫЙ ЭКСПОРТ
 
   const checkNewRecord = (game: string, score: number) => {
     if (game === 'multiplication' && score > multiplicationHighScore.value) multiplicationHighScore.value = score;
@@ -413,6 +372,6 @@ export const useProgressStore = defineStore('progress', () => {
     registerPerfectTest, checkAchievements,
 
     saveDivisionStat, getDivisionStat, getDivisionMedal, getDivisionMistakes,
-    saveSumSubStat, getSumSubStat
+    saveSumSubStat, getSumSubStat, getSumSubMedal // <-- Экспортируем
   };
 });

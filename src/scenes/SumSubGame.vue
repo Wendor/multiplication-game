@@ -8,7 +8,7 @@
     <GameControls
       v-model:mode="mode"
       :mistakesCount="0"
-      :showDifficulty="mode === 'test'"
+      :showDifficulty="mode === 'test' && testTarget === 'mix'"
       v-model:currentDifficulty="maxNumber"
       :difficultyOptions="[
         { label: 'до 10', value: 10 },
@@ -19,11 +19,12 @@
     />
 
     <transition name="fade-mode" mode="out-in">
-      <div v-if="mode === 'learning'" key="learning" class="learning-wrapper">
 
+      <div v-if="mode === 'learning'" key="learning" class="learning-wrapper">
         <LearningNav
           v-model="activeTable"
           :total="10"
+          :getMedal="progress.getSumSubMedal"
         />
 
         <transition name="slide-up-fade" mode="out-in">
@@ -57,6 +58,19 @@
       </div>
 
       <div v-else key="test" class="test-wrapper">
+
+        <div class="test-settings" v-if="!testFinished && mode === 'test'">
+          <div class="number-nav compact-nav">
+            <button class="nav-pill" :class="{ active: testTarget === 'mix' }" @click="setTestTarget('mix')">🔀 Микс</button>
+            <button v-for="i in 10" :key="i" class="nav-circle small" :class="{ active: testTarget === i }" @click="setTestTarget(i)">
+              {{ i }}
+              <div class="medal-icon small-medal" v-if="progress.getSumSubMedal(i) === 3">🥇</div>
+              <div class="medal-icon small-medal" v-else-if="progress.getSumSubMedal(i) === 2">🥈</div>
+              <div class="medal-icon small-medal" v-else-if="progress.getSumSubMedal(i) === 1">🥉</div>
+            </button>
+          </div>
+        </div>
+
         <GameTestArea
           :question="currentQuestionForProps"
           :currentIndex="currentQuestionIndex"
@@ -95,11 +109,17 @@ import { useProgressStore } from '../stores/progress';
 const progress = useProgressStore();
 
 type Mode = 'learning' | 'test' | 'blitz';
+type TestTarget = 'mix' | number;
+
 const mode = ref<Mode>('test');
 const maxNumber = ref(20);
+const testTarget = ref<TestTarget>('mix'); // Выбор для теста
+
 const activeTable = ref(1);
 const selectedFact = ref<{a: number, b: number, op: 'plus'} | null>(null);
+
 interface MathQuestion { text: string; correctAnswer: number; options: number[]; a: number; b: number; op: 'plus' | 'minus'; }
+
 const currentQuestionIndex = ref(0);
 const score = ref(0);
 const testFinished = ref(false);
@@ -110,42 +130,97 @@ const highScore = computed(() => progress.sumSubHighScore);
 const currentQuestion = computed(() => questions[currentQuestionIndex.value]);
 const currentQuestionForProps = computed(() => currentQuestion.value);
 
-watch(maxNumber, () => { if (mode.value === 'test') resetTest(); });
+watch(maxNumber, () => { if (mode.value === 'test' && testTarget.value === 'mix') resetTest(); });
+
+const setTestTarget = (t: TestTarget) => { testTarget.value = t; resetTest(); };
 const selectFact = (a: number, b: number, op: 'plus') => { selectedFact.value = { a, b, op }; };
 
 const generateTest = () => {
   questions.length = 0;
   const count = mode.value === 'blitz' ? 100 : 10;
+
+  // 1. ЕСЛИ ВЫБРАНА КОНКРЕТНАЯ ЦИФРА (например, 5)
+  if (testTarget.value !== 'mix' && typeof testTarget.value === 'number') {
+    const t = testTarget.value;
+    const pool: MathQuestion[] = [];
+
+    // Генерируем "таблицу" для числа t (от 1 до 10)
+    for (let i = 1; i <= 10; i++) {
+        // Сложение: 5 + 3, 3 + 5
+        const ans = t + i;
+        pool.push({ text: `${t} + ${i}`, correctAnswer: ans, options: generateOptions(ans), a: t, b: i, op: 'plus' });
+
+        // Добавляем зеркальный пример (3 + 5), только если слагаемые разные
+        if (t !== i) {
+           pool.push({ text: `${i} + ${t}`, correctAnswer: ans, options: generateOptions(ans), a: i, b: t, op: 'plus' });
+        }
+
+        // Вычитание: (5+3) - 5 = 3
+        // ans всегда больше t, так что вычитание корректное
+        pool.push({ text: `${ans} - ${t}`, correctAnswer: i, options: generateOptions(i), a: ans, b: t, op: 'minus' });
+    }
+
+    // ИСПРАВЛЕНИЕ: Перемешиваем пул и берем уникальные
+    pool.sort(() => Math.random() - 0.5);
+    const selected = pool.slice(0, count);
+
+    selected.forEach(item => {
+        questions.push({ ...item, options: generateOptions(item.correctAnswer) });
+    });
+
+    questionStartTime.value = Date.now();
+    return;
+  }
+
+  // 2. ЕСЛИ ВЫБРАН МИКС (старая логика, тут повторов нет благодаря usedKeys)
   const usedKeys = new Set<string>();
   let attempts = 0;
   while(questions.length < count && attempts < 1000) {
     attempts++;
     const isPlus = Math.random() > 0.5;
     let a, b, ans, text, op: 'plus' | 'minus';
-    if (isPlus) { a = getRandomInt(1, maxNumber.value - 1); b = getRandomInt(1, maxNumber.value - a); ans = a + b; text = `${a} + ${b}`; op = 'plus'; }
-    else { a = getRandomInt(2, maxNumber.value); b = getRandomInt(1, a - 1); ans = a - b; text = `${a} - ${b}`; op = 'minus'; }
+
+    if (isPlus) {
+      a = getRandomInt(1, maxNumber.value - 1); b = getRandomInt(1, maxNumber.value - a); ans = a + b; text = `${a} + ${b}`; op = 'plus';
+    } else {
+      a = getRandomInt(2, maxNumber.value); b = getRandomInt(1, a - 1); ans = a - b; text = `${a} - ${b}`; op = 'minus';
+    }
+
     if (usedKeys.has(text)) continue;
     usedKeys.add(text);
     questions.push({ text, correctAnswer: ans, options: generateOptions(ans), a, b, op });
   }
   questionStartTime.value = Date.now();
 };
+
 const getRandomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
-const generateOptions = (correct: number) => { const s = new Set<number>(); s.add(correct); while(s.size < 4) { const dev = getRandomInt(-5, 5); const w = correct + dev; if(w >= 0 && w !== correct) s.add(w); } return Array.from(s).sort(() => Math.random() - 0.5); };
+const generateOptions = (correct: number) => {
+  const s = new Set<number>();
+  s.add(correct);
+  while(s.size < 4) { const dev = getRandomInt(-5, 5); const w = correct + dev; if(w >= 0 && w !== correct) s.add(w); }
+  return Array.from(s).sort(() => Math.random() - 0.5);
+};
+
 const onAnswer = (isCorrect: boolean) => {
   if (!currentQuestion.value) return;
   const timeTaken = Date.now() - questionStartTime.value;
   if (isCorrect) { score.value++; progress.incrementTotalSolved(); }
   progress.saveSumSubStat(currentQuestion.value.a, currentQuestion.value.b, currentQuestion.value.op, isCorrect, timeTaken);
 };
-const onNext = () => { if (currentQuestionIndex.value < questions.length - 1) { currentQuestionIndex.value++; questionStartTime.value = Date.now(); } else { finishGame(); } };
+
+const onNext = () => {
+  if (currentQuestionIndex.value < questions.length - 1) { currentQuestionIndex.value++; questionStartTime.value = Date.now(); } else { finishGame(); }
+};
+
 const finishGame = () => {
   testFinished.value = true;
-  if (mode.value === 'blitz') progress.checkNewRecord('blitz', score.value);
-  else { if (score.value > highScore.value) progress.checkNewRecord('sumsub', score.value); if (score.value === 10) progress.registerPerfectTest(); }
+  if (mode.value === 'blitz') { progress.checkNewRecord('blitz', score.value); }
+  else {
+    if (score.value > highScore.value) progress.checkNewRecord('sumsub', score.value);
+    if (score.value === 10) progress.registerPerfectTest();
+  }
 };
+
 const resetTest = () => { currentQuestionIndex.value = 0; score.value = 0; testFinished.value = false; generateTest(); };
 onMounted(() => generateTest());
 </script>
-
-<style scoped></style>
