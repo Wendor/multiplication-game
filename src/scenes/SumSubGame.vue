@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue';
 import GameTestArea from '../components/GameTestArea.vue';
+import { useNavigationStore } from '../stores/navigation';
+import { useProgressStore } from '../stores/progress';
+const nav = useNavigationStore();
+const progress = useProgressStore();
 
 type Mode = 'learning' | 'test';
 interface Question { a: number; b: number; op: '+' | '-'; correctAnswer: number; options: number[]; }
@@ -8,7 +12,7 @@ interface Difficulty { label: string; max: number; }
 
 const difficulties: Difficulty[] = [ { label: 'до 10', max: 10 }, { label: 'до 20', max: 20 }, { label: 'до 50', max: 50 } ];
 
-const mode = ref<Mode>('learning');
+const mode = ref<Mode>('test');
 const maxNumber = ref(10);
 const testTarget = ref('mix');
 const selectedA = ref(2);
@@ -35,7 +39,12 @@ watch(maxNumber, () => { if (mode.value === 'test') resetTest(); });
 const setMode = (m: Mode) => { mode.value = m; if (m === 'test') resetTest(); };
 const setDifficulty = (max: number) => { maxNumber.value = max; };
 
-const onAnswer = (isCorrect: boolean) => { if (isCorrect) score.value++; };
+const onAnswer = (isCorrect: boolean) => {
+  if (isCorrect) {
+    score.value++;
+    progress.incrementTotalSolved();
+  }
+};
 const onNext = () => { if (currentQuestionIndex.value < 9) currentQuestionIndex.value++; else finishGame(); };
 
 const finishGame = () => {
@@ -87,15 +96,15 @@ onMounted(() => {
 <template>
   <div class="game-container">
     <div class="top-bar">
-      <button class="back-btn" @click="$emit('go-home')">←</button>
+      <button class="back-btn" @click="nav.goBack()">←</button>
       <h1>Сложение ±</h1>
-      <div class="header-stats">🏆 {{ highScore }}</div>
+      <div class="header-stats">🏆 {{ progress.totalSolved }}</div>
     </div>
 
     <div class="controls-area">
       <div class="segmented-control">
-        <button :class="{ active: mode === 'learning' }" @click="setMode('learning')">Учить</button>
         <button :class="{ active: mode === 'test' }" @click="setMode('test')">Тест</button>
+        <button :class="{ active: mode === 'learning' }" @click="setMode('learning')">Учить</button>
       </div>
       <transition name="fade">
         <div class="difficulty-selector" v-if="mode === 'learning' || testTarget === 'mix'">
@@ -167,7 +176,40 @@ onMounted(() => {
 <style scoped>
 /* Добавлено .test-wrapper для верстки */
 * { box-sizing: border-box; }
-.game-container { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; width: 100%; max-width: 500px; margin: 0 auto; padding: 10px; min-height: 100vh; color: #333; overflow-x: hidden; }
+.game-container {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  width: 100%;
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 10px;
+  background-color: #f4f6f8;
+  min-height: 100vh;
+  color: #333;
+  /* УДАЛЕНО: overflow-x: hidden; — это ломало sticky */
+}
+
+.top-bar {
+  /* Логика прилипания */
+  position: sticky;
+  top: 0;
+  z-index: 100;
+
+  /* Фон (полупрозрачный с размытием для красоты) */
+  background-color: rgba(244, 246, 248, 0.95);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+
+  /* Компенсация padding: 10px у родителя .game-container */
+  /* Растягиваем шапку на всю ширину и прижимаем к верху */
+  margin: -10px -10px 15px -10px;
+  padding: 10px 15px; /* Внутренние отступы */
+  width: calc(100% + 20px); /* Ширина 100% + 20px (компенсация отступов) */
+
+  /* Flexbox */
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 
 /* Важное исправление: контейнер теста */
 .test-wrapper {
@@ -177,7 +219,6 @@ onMounted(() => {
   align-items: center;
 }
 
-.top-bar { display: flex; align-items: center; margin-bottom: 15px; gap: 10px; }
 .back-btn { background: white; border: none; width: 40px; height: 40px; border-radius: 50%; font-size: 20px; color: #2c3e50; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
 h1 { font-size: 1.2rem; margin: 0; color: #2c3e50; flex-grow: 1; }
 .header-stats { background: #ffecb3; color: #d35400; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 0.9rem; }

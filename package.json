@@ -20,12 +20,14 @@
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
+    "canvas-confetti": "^1.9.4",
     "pinia": "^3.0.4",
     "vue": "^3.5.25"
   },
   "devDependencies": {
     "@prettier/plugin-oxc": "^0.0.5",
     "@tsconfig/node24": "^24.0.3",
+    "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^24.10.1",
     "@vitejs/plugin-vue": "^6.0.2",
     "@vue/eslint-config-prettier": "^10.2.0",

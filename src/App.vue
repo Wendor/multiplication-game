@@ -3,37 +3,47 @@
     <Transition name="fade-scene" mode="out-in">
       <component
         :is="currentSceneComponent"
-        @go-home="currentScene = 'menu'"
-        @select-mode="(mode: Scene) => currentScene = mode"
       />
     </Transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-// Обновленные пути импорта
+import { computed, onMounted, onUnmounted } from 'vue';
+import { useNavigationStore } from './stores/navigation';
+import { storeToRefs } from 'pinia';
+
 import MainMenu from './scenes/MainMenu.vue';
 import MultiplicationGame from './scenes/MultiplicationGame.vue';
 import SumSubGame from './scenes/SumSubGame.vue';
+import StatsScene from './scenes/StatsScene.vue';
+import DivisionGame from './scenes/DivisionGame.vue';
 
-type Scene = 'menu' | 'multiplication' | 'sumsub';
-
-const currentScene = ref<Scene>('menu');
+const navStore = useNavigationStore();
+const { currentScene } = storeToRefs(navStore);
 
 const currentSceneComponent = computed(() => {
   switch (currentScene.value) {
     case 'multiplication': return MultiplicationGame;
+    case 'division': return DivisionGame;
     case 'sumsub': return SumSubGame;
+    case 'stats': return StatsScene;
     default: return MainMenu;
   }
 });
+
+onMounted(() => navStore.initHistory());
+onUnmounted(() => navStore.cleanupHistory());
 </script>
 
 <style>
-body { margin: 0; background-color: #f4f6f8; overscroll-behavior: none; }
+body {
+  margin: 0;
+  background-color: #f4f6f8;
+  overscroll-behavior: none;
+  overflow-x: hidden;
+}
 </style>
-
 <style scoped>
 .app-wrapper { width: 100%; min-height: 100vh; }
 .fade-scene-enter-active, .fade-scene-leave-active { transition: opacity 0.3s ease, transform 0.3s ease; }
