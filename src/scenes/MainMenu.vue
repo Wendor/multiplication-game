@@ -6,12 +6,12 @@
         <div class="profile-header">
 
           <div class="mascot-wrapper">
-            <div class="mascot-emoji">{{ progress.currentCharacter!.emoji }}</div>
+            <div class="mascot-emoji">{{ progress.currentCharacter?.emoji }}</div>
             <div class="lvl-badge">{{ progress.currentLevel }} ур.</div>
           </div>
 
           <div class="profile-info">
-            <div class="rank-title">{{ progress.currentCharacter!.title }}</div>
+            <div class="rank-title">{{ progress.currentCharacter?.title }}</div>
             <div class="total-score">Решено задач: {{ progress.totalSolved }}</div>
           </div>
         </div>
@@ -64,6 +64,11 @@
           </div>
         </button>
       </div>
+
+      <div class="version-footer">
+        {{ buildVersion }}
+      </div>
+
     </div>
   </div>
 </template>
@@ -74,9 +79,15 @@ import { useProgressStore } from '../stores/progress';
 
 const nav = useNavigationStore();
 const progress = useProgressStore();
+
+// Теперь это РЕАЛЬНАЯ версия сборки, зашитая в код
+const buildVersion = __APP_VERSION__;
+
 </script>
 
 <style scoped>
+* { box-sizing: border-box; }
+
 .menu-container {
   min-height: 100vh;
   display: flex;
@@ -85,12 +96,13 @@ const progress = useProgressStore();
   padding: 20px;
   background: #f4f6f8;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  box-sizing: border-box;
 }
 
 .content {
   width: 100%;
   max-width: 400px;
+  display: flex;
+  flex-direction: column;
 }
 
 /* --- ПРОФИЛЬ --- */
@@ -177,6 +189,17 @@ const progress = useProgressStore();
 .stats-btn .card-icon { background: #27ae60; }
 .card-info h2 { margin: 0; font-size: 1.15rem; color: #2c3e50; font-weight: 700; }
 .card-info span { color: #95a5a6; font-size: 0.85rem; font-weight: 500; }
+
+/* --- ФУТЕР ВЕРСИИ --- */
+.version-footer {
+  margin-top: 30px;
+  text-align: center;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 0.75rem;
+  color: #bdc3c7;
+  opacity: 0.7;
+  letter-spacing: 0.5px;
+}
 
 @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
 </style>

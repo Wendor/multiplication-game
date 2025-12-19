@@ -3,6 +3,15 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const now = new Date();
+const y = now.getFullYear().toString().slice(-2);
+const m = (now.getMonth() + 1).toString().padStart(2, '0');
+const d = now.getDate().toString().padStart(2, '0');
+const h = now.getHours().toString().padStart(2, '0');
+const min = now.getMinutes().toString().padStart(2, '0');
+
+const buildVersion = `build ${y}${m}${d}-${h}${min}`;
+
 export default defineConfig({
   base: './',
   server: {
@@ -46,5 +55,8 @@ export default defineConfig({
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
+  },
+  define: {
+    '__APP_VERSION__': JSON.stringify(buildVersion)
   }
 })
