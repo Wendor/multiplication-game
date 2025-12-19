@@ -70,10 +70,12 @@
           :highScore="mode === 'blitz' ? progress.blitzHighScore : highScore"
           :finished="testFinished"
           :isBlitz="mode === 'blitz'"
+          :showRestartButton="showRestart"
           @answer="onAnswer"
           @next="onNext"
           @time-up="finishGame"
           @restart="resetTest"
+          @show-stats="goToStats"
         >
           <template #visualizer>
             <div class="test-visualizer-container" v-if="currentQuestion && mode !== 'blitz'">
@@ -96,11 +98,13 @@ import LearningNav from '../components/LearningNav.vue';
 import GameTestArea from '../components/GameTestArea.vue';
 import MathVisualizer from '../components/MathVisualizer.vue';
 import { useProgressStore } from '../stores/progress';
+import { useNavigationStore } from '../stores/navigation';
 import { useAudio } from '../composables/useAudio';
 import { useHaptics } from '../composables/useHaptics';
 import confetti from 'canvas-confetti';
 
 const progress = useProgressStore();
+const nav = useNavigationStore();
 const { playCorrect, playWrong, playWin } = useAudio();
 const { vibrateMedium, vibrateError, vibrateWin } = useHaptics();
 
@@ -115,6 +119,7 @@ const selectedFact = ref<{a: number, b: number, op: 'plus'} | null>(null);
 const isError = ref(false);
 
 interface MathQuestion { text: string; correctAnswer: number; options: number[]; a: number; b: number; op: 'plus' | 'minus'; }
+interface WeightedSumSubFact { a: number; b: number; op: 'plus' | 'minus'; weight: number; }
 
 const currentQuestionIndex = ref(0);
 const score = ref(0);
@@ -125,10 +130,16 @@ const questionStartTime = ref(0);
 const highScore = computed(() => progress.sumSubHighScore);
 const currentQuestion = computed(() => questions[currentQuestionIndex.value]);
 const currentQuestionForProps = computed(() => currentQuestion.value);
+const showRestart = computed(() => true);
 
 watch(maxNumber, () => { if (mode.value === 'test' && testTarget.value === 'mix') resetTest(); });
-const setTestTarget = (t: TestTarget) => { testTarget.value = t; resetTest(); };
-const selectFact = (a: number, b: number, op: 'plus') => { selectedFact.value = { a, b, op }; };
+watch(mode, () => resetTest());
+
+// --- ИСПРАВЛЕНО ---
+const goToStats = () => {
+  nav.navigate('stats', 'sumsub');
+};
+// ------------------
 
 const generateTest = () => {
   questions.length = 0;
@@ -150,19 +161,93 @@ const generateTest = () => {
     return;
   }
 
-  const usedKeys = new Set<string>();
-  let attempts = 0;
-  while(questions.length < count && attempts < 1000) {
-    attempts++;
-    const isPlus = Math.random() > 0.5;
-    let a, b, ans, text, op: 'plus' | 'minus';
-    if (isPlus) { a = getRandomInt(1, maxNumber.value - 1); b = getRandomInt(1, maxNumber.value - a); ans = a + b; text = `${a} + ${b}`; op = 'plus'; }
-    else { a = getRandomInt(2, maxNumber.value); b = getRandomInt(1, a - 1); ans = a - b; text = `${a} - ${b}`; op = 'minus'; }
-    if (usedKeys.has(text)) continue;
-    usedKeys.add(text);
-    questions.push({ text, correctAnswer: ans, options: generateOptions(ans), a, b, op });
+  let candidates: WeightedSumSubFact[] = [];
+  const fillCandidates = () => {
+      const pool: WeightedSumSubFact[] = [];
+      for (let a = 1; a < maxNumber.value; a++) {
+        for (let b = 1; b <= maxNumber.value - a; b++) {
+           pool.push(createWeightedFact(a, b, 'plus'));
+        }
+      }
+      for (let a = 2; a <= maxNumber.value; a++) {
+        for (let b = 1; b < a; b++) {
+           pool.push(createWeightedFact(a, b, 'minus'));
+        }
+      }
+      return pool;
+  };
+
+  candidates = fillCandidates();
+
+  for (let k = 0; k < count; k++) {
+    if (candidates.length === 0) {
+        if (mode.value === 'blitz') candidates = fillCandidates();
+        else break;
+    }
+
+    const selected = pickWeighted(candidates);
+    const index = candidates.indexOf(selected);
+    if (index > -1) candidates.splice(index, 1);
+
+    let text, ans;
+    if (selected.op === 'plus') {
+       text = `${selected.a} + ${selected.b}`;
+       ans = selected.a + selected.b;
+    } else {
+       text = `${selected.a} - ${selected.b}`;
+       ans = selected.a - selected.b;
+    }
+
+    questions.push({
+       text,
+       correctAnswer: ans,
+       options: generateOptions(ans),
+       a: selected.a,
+       b: selected.b,
+       op: selected.op
+    });
   }
+
   questionStartTime.value = Date.now();
+};
+
+const createWeightedFact = (a: number, b: number, op: 'plus' | 'minus'): WeightedSumSubFact => {
+    let v1, v2;
+    if (op === 'plus') { v1 = a; v2 = b; }
+    else { v1 = b; v2 = a - b; }
+
+    const stat = progress.getSumSubStat(v1, v2);
+    const attempts = stat.c + stat.w;
+
+    let weight = 0;
+
+    if (attempts === 0) {
+       weight = 1000;
+    } else {
+       weight = Math.max(1, Math.round(100 / attempts));
+    }
+
+    if (op === 'minus') {
+        if (attempts < 5) {
+            weight += 200;
+        } else {
+            weight *= 2;
+        }
+    }
+
+    if (stat.w > 0) weight += 50;
+
+    return { a, b, op, weight };
+};
+
+const pickWeighted = (items: WeightedSumSubFact[]): WeightedSumSubFact => {
+  const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
+  let random = Math.random() * totalWeight;
+  for (const item of items) {
+      random -= item.weight;
+      if (random <= 0) return item;
+  }
+  return items[items.length - 1]!;
 };
 
 const getRandomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
@@ -200,6 +285,10 @@ const finishGame = () => {
 };
 
 const resetTest = () => { currentQuestionIndex.value = 0; score.value = 0; testFinished.value = false; generateTest(); };
+
+const setTestTarget = (t: TestTarget) => { testTarget.value = t; resetTest(); };
+const selectFact = (a: number, b: number, op: 'plus') => { selectedFact.value = { a, b, op }; };
+
 onMounted(() => generateTest());
 </script>
 

@@ -2,12 +2,17 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 
 export type Scene = 'menu' | 'multiplication' | 'sumsub' | 'division' | 'stats' | 'achievements';
+export type StatsMode = 'multiplication' | 'division' | 'sumsub';
 
 export const useNavigationStore = defineStore('navigation', () => {
   const currentScene = ref<Scene>('menu');
+  const statsMode = ref<StatsMode>('multiplication');
 
-  // Переход с записью в историю
-  const navigate = (scene: Scene) => {
+  // Переход с записью в историю + возможность задать вкладку статистики
+  const navigate = (scene: Scene, mode?: StatsMode) => {
+    if (mode) {
+      statsMode.value = mode;
+    }
     currentScene.value = scene;
     window.history.pushState({ scene }, '', '');
   };
@@ -38,6 +43,7 @@ export const useNavigationStore = defineStore('navigation', () => {
 
   return {
     currentScene,
+    statsMode,
     navigate,
     goBack,
     initHistory,

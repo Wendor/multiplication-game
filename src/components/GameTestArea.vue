@@ -58,7 +58,10 @@
       <p v-if="score > highScore" class="new-record">🏆 Новый рекорд!</p>
       <p v-else class="encouragement">Молодец!</p>
 
-      <button @click="$emit('restart')" class="main-action-button">Ещё раз</button>
+      <button v-if="showRestartButton" @click="$emit('restart')" class="main-action-button">Ещё раз</button>
+      <p v-else class="encouragement" style="margin-top: 20px;">Ошибок больше нет! 🎉</p>
+
+      <button @click="$emit('show-stats')" class="secondary-action-button">📊 Прогресс</button>
     </div>
   </div>
 </template>
@@ -69,7 +72,7 @@ import { useGameEffects } from '../composables/useGameEffects';
 import { useHaptics } from '../composables/useHaptics';
 const { vibrateLight } = useHaptics();
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   question: { text: string; correctAnswer: number; options: number[] } | undefined;
   currentIndex: number;
   total: number;
@@ -77,13 +80,17 @@ const props = defineProps<{
   highScore: number;
   finished: boolean;
   isBlitz?: boolean;
-}>();
+  showRestartButton?: boolean;
+}>(), {
+  showRestartButton: true
+});
 
 const emit = defineEmits<{
   (e: 'answer', isCorrect: boolean): void;
   (e: 'next'): void;
   (e: 'restart'): void;
   (e: 'time-up'): void;
+  (e: 'show-stats'): void; // <-- Новое событие
 }>();
 
 const isAnswered = ref(false);
@@ -218,6 +225,10 @@ const getButtonClass = (option: number) => {
 .results { text-align: center; padding: 10px; width: 100%; }
 .final-score-circle { width: 110px; height: 110px; background: #2ecc71; color: white; font-size: 2.2rem; font-weight: 800; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 20px auto; animation: pop 0.5s; }
 .main-action-button { width: 100%; max-width: 400px; padding: 16px; background: #3498db; color: white; border: none; border-radius: 14px; font-size: 1.1rem; font-weight: bold; margin-top: 15px; }
+
+/* НОВЫЙ СТИЛЬ КНОПКИ */
+.secondary-action-button { width: 100%; max-width: 400px; padding: 16px; background: white; color: #3498db; border: 2px solid #3498db; border-radius: 14px; font-size: 1.1rem; font-weight: bold; margin-top: 10px; }
+
 .subtitle { margin-top: -15px; color: #7f8c8d; font-weight: bold; }
 @keyframes pop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }

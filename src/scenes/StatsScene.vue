@@ -6,19 +6,19 @@
       <div class="segmented-control">
         <button
           :class="{ active: mode === 'multiplication' }"
-          @click="mode = 'multiplication'"
+          @click="setMode('multiplication')"
         >
           Умножение
         </button>
         <button
           :class="{ active: mode === 'division' }"
-          @click="mode = 'division'"
+          @click="setMode('division')"
         >
           Деление
         </button>
         <button
           :class="{ active: mode === 'sumsub' }"
-          @click="mode = 'sumsub'"
+          @click="setMode('sumsub')"
         >
           Сложение
         </button>
@@ -88,14 +88,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import TopBar from '../components/TopBar.vue';
 import { useProgressStore } from '../stores/progress';
+import { useNavigationStore, type StatsMode } from '../stores/navigation';
 
 const progress = useProgressStore();
+const nav = useNavigationStore();
 
-type StatMode = 'multiplication' | 'division' | 'sumsub';
-const mode = ref<StatMode>('multiplication');
+const mode = ref<StatsMode>(nav.statsMode);
+
+// Следим за изменениями в сторе (если переход произошел извне)
+watch(() => nav.statsMode, (newVal) => {
+  mode.value = newVal;
+});
+
+// Обновляем стор при ручном переключении
+const setMode = (newMode: StatsMode) => {
+  mode.value = newMode;
+  nav.statsMode = newMode;
+};
 
 const selectedCell = ref<{
   title: string,
@@ -164,7 +176,6 @@ const showDetails = (row: number, col: number) => {
 * { box-sizing: border-box; }
 
 .stats-container {
-  /* Используем глобальные стили, но можно переопределить */
   width: 100%;
   max-width: 500px;
   margin: 0 auto;
@@ -176,7 +187,31 @@ const showDetails = (row: number, col: number) => {
 
 /* Переключатель */
 .controls { margin-bottom: 20px; }
-/* Сетка (Оставляем локально, так как специфично для этого экрана) */
+.segmented-control {
+  display: flex;
+  background: #e0e0e0;
+  padding: 4px;
+  border-radius: 12px;
+}
+.segmented-control button {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 8px 0;
+  border-radius: 8px;
+  font-weight: 600;
+  color: #7f8c8d;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+}
+.segmented-control button.active {
+  background: white;
+  color: #2c3e50;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+/* Сетка */
 .grid-wrapper {
   background: white;
   border-radius: 16px;
@@ -202,14 +237,12 @@ const showDetails = (row: number, col: number) => {
 .status-dot { width: 8px; height: 8px; border-radius: 50%; }
 .diamond-icon { font-size: 10px; animation: pulse 2s infinite; }
 
-/* Цвета градаций */
 .stat-cell.empty { background: #f0f2f5; } .stat-cell.empty .status-dot { background: #dcdde1; }
 .stat-cell.error { background: #fadbd8; } .stat-cell.error .status-dot { background: #e74c3c; }
 .stat-cell.novice { background: #fef9e7; } .stat-cell.novice .status-dot { background: #f1c40f; }
 .stat-cell.mastered { background: #d4efdf; } .stat-cell.mastered .status-dot { background: #27ae60; }
 .stat-cell.diamond { background: #d6eaf8; border: 1px solid #aed6f1; } .stat-cell.diamond .status-dot { display: none; }
 
-/* Легенда */
 .legend { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; align-items: center; padding-bottom: 20px; }
 .legend-row { display: flex; gap: 15px; }
 .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: #7f8c8d; }
@@ -218,7 +251,6 @@ const showDetails = (row: number, col: number) => {
 .dot.yellow { background: #f1c40f; } .dot.green { background: #27ae60; }
 .diamond-legend { font-size: 12px; }
 
-/* Модалка */
 .modal-backdrop { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 200; backdrop-filter: blur(4px); }
 .modal-card { background: white; padding: 25px; border-radius: 20px; width: 80%; max-width: 300px; text-align: center; animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
 .modal-card h3 { margin: 0 0 10px 0; font-size: 1.5rem; color: #2c3e50; }

@@ -78,10 +78,12 @@
           :highScore="mode === 'blitz' ? blitzHighScore : highScore"
           :finished="testFinished"
           :isBlitz="mode === 'blitz'"
+          :showRestartButton="showRestart"
           @answer="onAnswer"
           @next="onNext"
           @time-up="finishGame"
           @restart="resetTest"
+          @show-stats="goToStats"
         >
           <template #visualizer>
             <div class="test-visualizer-container" v-if="currentQuestion && mode !== 'blitz'">
@@ -105,11 +107,13 @@ import LearningNav from '../components/LearningNav.vue';
 import GameTestArea from '../components/GameTestArea.vue';
 import MathVisualizer from '../components/MathVisualizer.vue';
 import { useProgressStore } from '../stores/progress';
+import { useNavigationStore } from '../stores/navigation';
 import { useAudio } from '../composables/useAudio';
 import { useHaptics } from '../composables/useHaptics';
 import confetti from 'canvas-confetti';
 
 const progress = useProgressStore();
+const nav = useNavigationStore();
 const { playCorrect, playWrong, playWin } = useAudio();
 const { vibrateMedium, vibrateError, vibrateWin } = useHaptics();
 
@@ -136,8 +140,16 @@ const blitzHighScore = computed(() => progress.blitzHighScore);
 const mistakesCount = computed(() => progress.getMistakes().length);
 const currentQuestion = computed(() => questions[currentQuestionIndex.value]);
 const currentQuestionForProps = computed(() => currentQuestion.value);
+const showRestart = computed(() => mode.value !== 'mistakes' || mistakesCount.value > 0);
 
 watch(maxNumber, (newMax) => { if (activeTable.value > newMax) activeTable.value = newMax; if (mode.value === 'test' && testTarget.value === 'mix') resetTest(); });
+watch(mode, () => resetTest());
+
+// --- ИСПРАВЛЕНО ---
+const goToStats = () => {
+  nav.navigate('stats', 'multiplication');
+};
+// ------------------
 
 const generateTest = () => {
   questions.length = 0;
@@ -175,9 +187,14 @@ const generateTest = () => {
 
 const createWeightedFact = (a: number, b: number): WeightedFact => {
   const stat = progress.getStat(a, b);
-  let weight = 10; if (stat.w > 0) weight += (stat.w * 50); if (stat.c > 5 && stat.w === 0) weight = 1; else if (stat.c > 2) weight = 5;
+  const attempts = stat.c + stat.w;
+  let weight = 0;
+  if (attempts === 0) { weight = 1000; }
+  else { weight = Math.max(1, Math.round(100 / attempts)); }
+  if (stat.w > 0) { weight += 5; }
   return { a, b, weight };
 };
+
 const pickWeighted = (items: WeightedFact[]): WeightedFact => {
   const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
   let random = Math.random() * totalWeight; for (const item of items) { random -= item.weight; if (random <= 0) return item; }

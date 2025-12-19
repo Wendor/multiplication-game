@@ -90,11 +90,11 @@ export const useProgressStore = defineStore('progress', () => {
     { lvl: 10, emoji: '🦉', title: 'Мудрая Сова' },
     { lvl: 15, emoji: '🎓', title: 'Профессор' },
     { lvl: 20, emoji: '🦅', title: 'Орел' },
-    { lvl: 30, emoji: '🧙‍♂️', title: 'Магистр' },
-    { lvl: 40, emoji: '🧞‍♂️', title: 'Джинн' },
-    { lvl: 50, emoji: '🐲', title: 'Дракон' },
-    { lvl: 75, emoji: '👑', title: 'Король Математики' },
-    { lvl: 100, emoji: '🚀', title: 'Космический Разум' }
+    { lvl: 25, emoji: '🧙‍♂️', title: 'Магистр' },
+    { lvl: 30, emoji: '🧞‍♂️', title: 'Джинн' },
+    { lvl: 35, emoji: '🐲', title: 'Дракон' },
+    { lvl: 40, emoji: '👑', title: 'Король Математики' },
+    { lvl: 45, emoji: '🚀', title: 'Космический Разум' }
   ];
 
   const checkDailyProgress = () => {
