@@ -1,11 +1,9 @@
 <template>
-  <div class="game-container">
-    <div class="top-bar">
-      <button class="back-btn" @click="nav.goBack()">←</button>
-      <h1>Сложение ±</h1>
-      <div class="header-stats" v-if="mode === 'blitz'">⚡ {{ progress.blitzHighScore }}</div>
-      <div class="header-stats" v-else>🏆 {{ progress.totalSolved }}</div>
-    </div>
+  <div class="page-container">
+<TopBar title="Сложение">
+      <span v-if="mode === 'blitz'">⚡ {{ progress.blitzHighScore }}</span>
+      <span v-else>🏆 {{ progress.totalSolved }}</span>
+    </TopBar>
 
     <div class="controls-area">
       <div class="segmented-control">
@@ -14,16 +12,14 @@
         <button :class="{ active: mode === 'blitz' }" @click="setMode('blitz')">⚡ Блиц</button>
       </div>
 
-      <transition name="fade">
-        <div class="difficulty-selector" v-if="mode === 'test'">
-          <div class="chips-row">
-            <button class="chip" :class="{ active: maxNumber === 10 }" @click="maxNumber = 10">до 10</button>
-            <button class="chip" :class="{ active: maxNumber === 20 }" @click="maxNumber = 20">до 20</button>
-            <button class="chip" :class="{ active: maxNumber === 50 }" @click="maxNumber = 50">до 50</button>
-            <button class="chip" :class="{ active: maxNumber === 100 }" @click="maxNumber = 100">до 100</button>
-          </div>
+      <div class="difficulty-selector" v-if="mode === 'test'">
+        <div class="chips-row">
+          <button class="chip" :class="{ active: maxNumber === 10 }" @click="maxNumber = 10">до 10</button>
+          <button class="chip" :class="{ active: maxNumber === 20 }" @click="maxNumber = 20">до 20</button>
+          <button class="chip" :class="{ active: maxNumber === 50 }" @click="maxNumber = 50">до 50</button>
+          <button class="chip" :class="{ active: maxNumber === 100 }" @click="maxNumber = 100">до 100</button>
         </div>
-      </transition>
+      </div>
     </div>
 
     <transition name="fade-mode" mode="out-in">
@@ -34,13 +30,7 @@
             {{ i }}
           </button>
         </div>
-        <div class="toggle-row">
-          <label class="toggle-switch">
-            <input type="checkbox" v-model="hideAnswers" />
-            <span class="slider"></span>
-          </label>
-          <span class="toggle-text">Скрыть ответы</span>
-        </div>
+
         <transition name="slide-up-fade" mode="out-in">
           <div :key="activeTable" class="single-table-view">
             <h2 class="table-title">Прибавляем к {{ activeTable }}</h2>
@@ -48,7 +38,7 @@
               <div v-for="j in 10" :key="j" class="table-row-large" @click="selectFact(activeTable, j, 'plus')">
                 <div class="row-content">
                   <span class="num">{{ activeTable }}</span><span class="sign">+</span><span class="num">{{ j }}</span><span class="sign">=</span>
-                  <span class="result-box" :class="{ 'revealed': !hideAnswers || (selectedFact?.a === activeTable && selectedFact?.b === j) }">{{ activeTable + j }}</span>
+                  <span class="result-box revealed">{{ activeTable + j }}</span>
                 </div>
               </div>
             </div>
@@ -64,16 +54,18 @@
               <div class="big-equation">
                 <span class="color-a">{{ selectedFact.a }}</span> + <span class="color-b">{{ selectedFact.b }}</span> = {{ selectedFact.a + selectedFact.b }}
               </div>
+
+              <p class="viz-hint">
+                Сложим <b class="color-a">{{ selectedFact.a }}</b> синих и <b class="color-b">{{ selectedFact.b }}</b> красных точек:
+              </p>
+
               <div class="viz-container">
-                <div class="sum-visualizer">
-                  <div class="dots-group">
-                     <div v-for="n in selectedFact.a" :key="'a'+n" class="dot dot-a"></div>
-                  </div>
-                  <div class="plus-sign">+</div>
-                  <div class="dots-group">
-                     <div v-for="n in selectedFact.b" :key="'b'+n" class="dot dot-b"></div>
-                  </div>
-                </div>
+                <MathVisualizer
+                  type="sumsub"
+                  :a="selectedFact.a"
+                  :b="selectedFact.b"
+                  op="plus"
+                />
               </div>
             </div>
           </div>
@@ -97,23 +89,14 @@
           <template #visualizer>
             <div class="test-visualizer-container" v-if="currentQuestion && mode !== 'blitz'">
                <div class="test-visualizer">
-                  <div v-if="currentQuestion.op === 'plus'" class="sum-visualizer mini-viz">
-                     <div class="dots-group mini-group">
-                        <div v-for="n in currentQuestion.a" :key="'a'+n" class="dot mini-dot dot-a"></div>
-                     </div>
-                     <div class="plus-sign mini-sign">+</div>
-                     <div class="dots-group mini-group">
-                        <div v-for="n in currentQuestion.b" :key="'b'+n" class="dot mini-dot dot-b"></div>
-                     </div>
-                  </div>
-                  <div v-else class="sum-visualizer mini-viz">
-                     <div class="dots-group mini-group">
-                        <div v-for="n in currentQuestion.correctAnswer" :key="'rem'+n" class="dot mini-dot dot-a"></div>
-                     </div>
-                     <div class="dots-group mini-group faded-group">
-                        <div v-for="n in currentQuestion.b" :key="'sub'+n" class="dot mini-dot dot-sub"></div>
-                     </div>
-                  </div>
+                  <MathVisualizer
+                    :key="currentQuestion?.text"
+                    type="sumsub"
+                    :a="currentQuestion.a"
+                    :b="currentQuestion.b"
+                    :op="currentQuestion.op"
+                    :isMini="true"
+                  />
                </div>
             </div>
           </template>
@@ -126,30 +109,20 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted } from 'vue';
 import GameTestArea from '../components/GameTestArea.vue';
-import { useNavigationStore } from '../stores/navigation';
+import MathVisualizer from '../components/MathVisualizer.vue';
+import TopBar from '../components/TopBar.vue';
 import { useProgressStore } from '../stores/progress';
 
-const nav = useNavigationStore();
 const progress = useProgressStore();
 
 type Mode = 'learning' | 'test' | 'blitz';
 const mode = ref<Mode>('test');
 const maxNumber = ref(20);
 
-// Обучение
 const activeTable = ref(1);
-const hideAnswers = ref(false);
 const selectedFact = ref<{a: number, b: number, op: 'plus'} | null>(null);
 
-// Тест
-interface MathQuestion {
-  text: string;
-  correctAnswer: number;
-  options: number[];
-  a: number;
-  b: number;
-  op: 'plus' | 'minus';
-}
+interface MathQuestion { text: string; correctAnswer: number; options: number[]; a: number; b: number; op: 'plus' | 'minus'; }
 
 const currentQuestionIndex = ref(0);
 const score = ref(0);
@@ -162,53 +135,30 @@ const currentQuestion = computed(() => questions[currentQuestionIndex.value]);
 const currentQuestionForProps = computed(() => currentQuestion.value);
 
 watch(maxNumber, () => { if (mode.value === 'test') resetTest(); });
+const setMode = (m: Mode) => { mode.value = m; if (m !== 'learning') resetTest(); else selectedFact.value = null; };
+const selectFact = (a: number, b: number, op: 'plus') => { selectedFact.value = { a, b, op }; };
 
-const setMode = (m: Mode) => {
-  mode.value = m;
-  if (m !== 'learning') resetTest();
-  else selectedFact.value = null;
-};
-
-const selectFact = (a: number, b: number, op: 'plus') => {
-  selectedFact.value = { a, b, op };
-};
-
-// --- УНИКАЛЬНАЯ ГЕНЕРАЦИЯ ---
 const generateTest = () => {
   questions.length = 0;
   const count = mode.value === 'blitz' ? 100 : 10;
-  const usedKeys = new Set<string>(); // Для отслеживания дублей
+  const usedKeys = new Set<string>();
 
   let attempts = 0;
   while(questions.length < count && attempts < 1000) {
     attempts++;
-
     const isPlus = Math.random() > 0.5;
     let a, b, ans, text, op: 'plus' | 'minus';
 
     if (isPlus) {
-      a = getRandomInt(1, maxNumber.value - 1);
-      b = getRandomInt(1, maxNumber.value - a);
-      ans = a + b;
-      text = `${a} + ${b}`;
-      op = 'plus';
+      a = getRandomInt(1, maxNumber.value - 1); b = getRandomInt(1, maxNumber.value - a); ans = a + b; text = `${a} + ${b}`; op = 'plus';
     } else {
-      a = getRandomInt(2, maxNumber.value);
-      b = getRandomInt(1, a - 1);
-      ans = a - b;
-      text = `${a} - ${b}`;
-      op = 'minus';
+      a = getRandomInt(2, maxNumber.value); b = getRandomInt(1, a - 1); ans = a - b; text = `${a} - ${b}`; op = 'minus';
     }
 
-    // ПРОВЕРКА НА УНИКАЛЬНОСТЬ
-    if (usedKeys.has(text)) {
-      continue; // Пропускаем, если такой вопрос уже есть
-    }
-
+    if (usedKeys.has(text)) continue;
     usedKeys.add(text);
     questions.push({ text, correctAnswer: ans, options: generateOptions(ans), a, b, op });
   }
-
   questionStartTime.value = Date.now();
 };
 
@@ -216,122 +166,41 @@ const getRandomInt = (min: number, max: number) => Math.floor(Math.random() * (m
 const generateOptions = (correct: number) => {
   const s = new Set<number>();
   s.add(correct);
-  while(s.size < 4) {
-    const dev = getRandomInt(-5, 5);
-    const w = correct + dev;
-    if(w >= 0 && w !== correct) s.add(w);
-  }
+  while(s.size < 4) { const dev = getRandomInt(-5, 5); const w = correct + dev; if(w >= 0 && w !== correct) s.add(w); }
   return Array.from(s).sort(() => Math.random() - 0.5);
 };
 
 const onAnswer = (isCorrect: boolean) => {
+  if (!currentQuestion.value) return;
   const timeTaken = Date.now() - questionStartTime.value;
-  if (isCorrect) {
-    score.value++;
-    progress.incrementTotalSolved();
-  }
-  progress.checkAchievements(timeTaken);
+  if (isCorrect) { score.value++; progress.incrementTotalSolved(); }
+
+  progress.saveSumSubStat(
+    currentQuestion.value.a,
+    currentQuestion.value.b,
+    currentQuestion.value.op,
+    isCorrect,
+    timeTaken
+  );
 };
 
 const onNext = () => {
-  if (currentQuestionIndex.value < questions.length - 1) {
-    currentQuestionIndex.value++;
-    questionStartTime.value = Date.now();
-  } else {
-    finishGame();
-  }
+  if (currentQuestionIndex.value < questions.length - 1) { currentQuestionIndex.value++; questionStartTime.value = Date.now(); } else { finishGame(); }
 };
 
 const finishGame = () => {
   testFinished.value = true;
-  if (mode.value === 'blitz') {
-    progress.checkNewRecord('blitz', score.value);
-  } else {
-    if (score.value > highScore.value) {
-      progress.checkNewRecord('sumsub', score.value);
-    }
-    if (score.value === 10) {
-      progress.registerPerfectTest();
-    }
+  if (mode.value === 'blitz') { progress.checkNewRecord('blitz', score.value); }
+  else {
+    if (score.value > highScore.value) progress.checkNewRecord('sumsub', score.value);
+    if (score.value === 10) progress.registerPerfectTest();
   }
 };
 
-const resetTest = () => {
-  currentQuestionIndex.value = 0;
-  score.value = 0;
-  testFinished.value = false;
-  generateTest();
-};
-
+const resetTest = () => { currentQuestionIndex.value = 0; score.value = 0; testFinished.value = false; generateTest(); };
 onMounted(() => generateTest());
 </script>
 
 <style scoped>
-* { box-sizing: border-box; }
-.game-container { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; width: 100%; max-width: 500px; margin: 0 auto; padding: 10px; background-color: #f4f6f8; min-height: 100vh; color: #333; }
-.top-bar { position: sticky; top: 0; z-index: 100; background-color: rgba(244, 246, 248, 0.95); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(0,0,0,0.05); margin: -10px -10px 15px -10px; padding: 10px 15px; width: auto; display: flex; align-items: center; gap: 10px; }
-.back-btn { background: white; border: none; width: 40px; height: 40px; border-radius: 50%; font-size: 20px; color: #2c3e50; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); flex-shrink: 0; }
-h1 { font-size: 1.2rem; margin: 0; color: #2c3e50; flex-grow: 1; }
-.header-stats { background: #ffecb3; color: #d35400; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 0.9rem; white-space: nowrap; flex-shrink: 0; }
-.controls-area { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
-.segmented-control { display: flex; width: 100%; background: #e0e0e0; padding: 4px; border-radius: 12px; }
-.segmented-control button { flex: 1; border: none; background: transparent; padding: 8px 0; border-radius: 8px; font-weight: 600; font-size: 0.9rem; color: #7f8c8d; cursor: pointer; }
-.segmented-control button.active { background: white; color: #333; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-.difficulty-selector { width: 100%; }
-.chips-row { display: flex; width: 100%; gap: 8px; flex-wrap: wrap; }
-.chip { flex: 1 0 20%; background: white; border: 1px solid #ddd; padding: 10px 0; border-radius: 12px; font-size: 0.9rem; cursor: pointer; color: #555; text-align: center; white-space: nowrap; transition: all 0.2s; }
-.chip.active { background: #9b59b6; color: white; border-color: #8e44ad; }
-/* LEARNING */
-.learning-wrapper { width: 100%; padding-bottom: 40px; }
-.number-nav { display: flex; overflow-x: auto; gap: 8px; padding: 5px; margin-bottom: 15px; scrollbar-width: none; }
-.nav-circle { flex: 0 0 44px; height: 44px; border-radius: 50%; background: white; border: 2px solid #eee; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: bold; color: #555; cursor: pointer; }
-.nav-circle.active { background: #9b59b6; color: white; border-color: #8e44ad; transform: scale(1.1); }
-.toggle-row { display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 15px; }
-.toggle-switch { position: relative; width: 40px; height: 22px; }
-.toggle-switch input { display: none; }
-.slider { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; border-radius: 34px; transition: .4s; }
-.slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 2px; bottom: 2px; background-color: white; border-radius: 50%; transition: .4s; }
-input:checked + .slider { background-color: #2ecc71; }
-input:checked + .slider:before { transform: translateX(18px); }
-.single-table-view { background: white; border-radius: 16px; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-.table-title { text-align: center; margin: 0 0 15px; font-size: 1.2rem; color: #2c3e50; }
-.table-row-large { padding: 12px 0; border-bottom: 1px solid #f1f1f1; cursor: pointer; }
-.row-content { display: flex; align-items: center; justify-content: center; gap: 0.5rem; font-size: 1.3rem; font-weight: 500; }
-.num { width: 1.5em; text-align: center; font-weight: 700; }
-.result-box { width: 2em; text-align: center; font-weight: 800; transition: color 0.3s; }
-.result-box.revealed { color: #27ae60; }
-.result-box:not(.revealed) { color: transparent; text-shadow: 0 0 5px rgba(0,0,0,0.1); }
-/* Viz Panel */
-.visualizer-backdrop { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 99; }
-.visualizer-panel { position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; }
-.visualizer-card { background: white; border-radius: 20px 20px 0 0; padding: 20px; text-align: center; padding-bottom: 40px; }
-.close-btn-mobile { position: absolute; top: 10px; right: 10px; background: #f1f2f6; border: none; width: 30px; height: 30px; border-radius: 50%; font-weight: bold; color: #7f8c8d; }
-.big-equation { font-size: 2rem; font-weight: 800; margin-bottom: 20px; color: #2c3e50; }
-.color-a { color: #3498db; }
-.color-b { color: #e74c3c; }
-/* Visualizer Container */
-.viz-container { display: flex; justify-content: center; margin-top: 10px; }
-.sum-visualizer { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; justify-content: center; }
-.dots-group { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; padding: 4px; border-radius: 8px; }
-.plus-sign { font-size: 2rem; font-weight: bold; color: #ccc; }
-.dot { width: 20px; height: 20px; border-radius: 50%; animation: pop 0.3s backwards; }
-.dot-a { background: #3498db; }
-.dot-b { background: #e74c3c; }
-.dot-sub { background: #bdc3c7; opacity: 0.5; border: 1px dashed #95a5a6; }
-.faded-group { opacity: 0.7; }
-/* Test Viz */
-.test-visualizer-container { width: 100%; margin-bottom: 15px; display: flex; justify-content: center; }
-.test-visualizer { background: #fafafa; padding: 10px; border-radius: 12px; width: 100%; display: flex; justify-content: center; }
-.mini-viz { gap: 8px; }
-.mini-group { gap: 3px; }
-.mini-dot { width: 12px; height: 12px; }
-.mini-sign { font-size: 1.2rem; }
-/* Transitions */
-.slide-up-panel-enter-active, .slide-up-panel-leave-active { transition: transform 0.3s ease; }
-.slide-up-panel-enter-from, .slide-up-panel-leave-to { transform: translateY(100%); }
-.slide-up-fade-enter-active, .slide-up-fade-leave-active { transition: opacity 0.3s; }
-.slide-up-fade-enter-from, .slide-up-fade-leave-to { opacity: 0; }
-.fade-mode-enter-active, .fade-mode-leave-active { transition: opacity 0.3s ease; }
-.fade-mode-enter-from, .fade-mode-leave-to { opacity: 0; }
-@keyframes pop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
 </style>

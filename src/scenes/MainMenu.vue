@@ -196,8 +196,7 @@ const buildVersion = __APP_VERSION__;
   text-align: center;
   font-family: "Courier New", Courier, monospace;
   font-size: 0.75rem;
-  color: #bdc3c7;
-  opacity: 0.7;
+  color: #353535;
   letter-spacing: 0.5px;
 }
 
