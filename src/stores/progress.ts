@@ -86,7 +86,7 @@ export const useProgressStore = defineStore('progress', () => {
   const stages = [
     { lvl: 0, emoji: '🥚', title: 'Яйцо' },
     { lvl: 2, emoji: '🐣', title: 'Цыплёнок' },
-    { lvl: 5, emoji: '🦊', title: 'Лисенок' },
+    { lvl: 5, emoji: '🦊', title: 'Лисёнок' },
     { lvl: 10, emoji: '🦉', title: 'Мудрая Сова' },
     { lvl: 15, emoji: '🎓', title: 'Профессор' },
     { lvl: 20, emoji: '🦅', title: 'Орел' },
@@ -155,10 +155,14 @@ export const useProgressStore = defineStore('progress', () => {
     const corrected = localStorage.getItem('mistakesCorrected');
     if (corrected) mistakesCorrected.value = parseInt(corrected, 10);
 
+    const streakLocal = localStorage.getItem('currentStreak');
+    if (streakLocal) currentStreak.value = parseInt(streakLocal, 10);
+
     checkDailyProgress();
   };
 
   // --- WATCHERS ---
+  watch(currentStreak, (val) => localStorage.setItem('currentStreak', val.toString()));
   watch(multiplicationHighScore, (val) => localStorage.setItem('multiplicationHighScore', val.toString()));
   watch(sumSubHighScore, (val) => localStorage.setItem('sumSubHighScore', val.toString()));
   watch(divisionHighScore, (val) => localStorage.setItem('divisionHighScore', val.toString()));
